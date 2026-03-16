@@ -92,7 +92,6 @@ body::before {
   padding: 28px 32px;
   flex: 1;
   overflow-y: auto;
-  scroll-behavior: smooth;
 }
 #feed::-webkit-scrollbar { width: 5px; }
 #feed::-webkit-scrollbar-track { background: transparent; }
@@ -457,6 +456,7 @@ body.sidebar-hidden #sidebar-toggle { right: 0; }
     </div>
     <button id="btn-demo">DEMO</button>
     <button id="btn-theme">LIGHT</button>
+    <button id="btn-scroll">SCROLL: ON</button>
     <button id="btn-pause">PAUSE</button>
     <button id="btn-clear">CLEAR</button>
   </div>
@@ -472,6 +472,7 @@ const sizeSlider = document.getElementById('size-slider')
 
 let fontSize = 18
 let paused = false
+let autoScroll = true
 let startTime = null
 let ws = null
 let timerInterval = null
@@ -491,7 +492,39 @@ function addLine(text, type = 'insight') {
   const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
   div.innerHTML = '<span class="ts">' + ts + '</span>' + text
   feed.appendChild(div)
-  feed.scrollTop = feed.scrollHeight
+  if (autoScroll) {
+    requestAnimationFrame(() => {
+      feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' })
+    })
+  }
+}
+
+// Detect manual scroll → disable auto-scroll. Scroll to bottom → re-enable.
+feed.addEventListener('scroll', () => {
+  const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60
+  if (atBottom && !autoScroll) {
+    autoScroll = true
+    updateScrollBtn()
+  } else if (!atBottom && autoScroll) {
+    autoScroll = false
+    updateScrollBtn()
+  }
+})
+
+function updateScrollBtn() {
+  const btn = document.getElementById('btn-scroll')
+  if (btn) {
+    btn.textContent = autoScroll ? 'SCROLL: ON' : 'SCROLL: OFF'
+    btn.classList.toggle('active', !autoScroll)
+  }
+}
+
+function clearAll() {
+  feed.innerHTML = ''
+  numbersList.innerHTML = ''
+  pointsList.innerHTML = ''
+  objectionsList.innerHTML = ''
+  actionsList.innerHTML = ''
 }
 
 function updateSentiment(level) {
@@ -627,7 +660,13 @@ document.getElementById('btn-pause').onclick = () => {
   btn.textContent = paused ? 'RESUME' : 'PAUSE'
   btn.classList.toggle('active', paused)
 }
-document.getElementById('btn-clear').onclick = () => { feed.innerHTML = '' }
+document.getElementById('btn-clear').onclick = () => clearAll()
+
+document.getElementById('btn-scroll').onclick = () => {
+  autoScroll = !autoScroll
+  updateScrollBtn()
+  if (autoScroll) feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' })
+}
 
 // Theme toggle
 let currentTheme = localStorage.getItem('cp-theme') || 'dark'
@@ -648,7 +687,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '+' || e.key === '=') setFontSize(fontSize + 2)
   if (e.key === '-') setFontSize(fontSize - 2)
   if (e.key === ' ') { e.preventDefault(); document.getElementById('btn-pause').click() }
-  if (e.key === 'c' && !e.ctrlKey) feed.innerHTML = ''
+  if (e.key === 'c' && !e.ctrlKey) clearAll()
+  if (e.key === 's') document.getElementById('btn-scroll').click()
   if (e.key === 'd') toggleDemo()
   if (e.key === 't') document.getElementById('btn-theme').click()
   if (e.key === 'f') document.documentElement.requestFullscreen?.()
@@ -710,9 +750,13 @@ function toggleDemo() {
     clearInterval(demoInterval)
     clearInterval(timerInterval)
     demoInterval = null
+    // Full reset — clear feed + sidebar + status
+    clearAll()
     statusEl.textContent = 'DISCONNECTED'
     statusEl.style.color = 'var(--text-subtle)'
-    addLine('Demo mode stopped', 'system')
+    timerEl.textContent = '00:00'
+    sentimentEl.innerHTML = '<span class="sentiment-dot"></span>--'
+    startTime = null
     btn.textContent = 'DEMO'
     btn.classList.remove('active')
   }
