@@ -124,7 +124,9 @@ let currentSentiment = 'warm'
 
 // ─── HTTP Server (serves UI on http://127.0.0.1:PORT) ───────
 
-const httpServer = Bun?.serve?.({
+let httpServer = null
+try {
+  httpServer = Bun?.serve?.({
   port: WS_PORT + 1,
   async fetch(req) {
     const url = new URL(req.url)
@@ -182,7 +184,10 @@ const httpServer = Bun?.serve?.({
       return new Response('UI not found. Place ui.html next to server.mjs', { status: 404 })
     }
   },
-}) || null
+})
+} catch (err) {
+  console.log(`  UI HTTP:   failed (port ${WS_PORT + 1} in use) — UI available via file:// only`)
+}
 
 if (httpServer) {
   console.log(`  UI HTTP:   http://127.0.0.1:${WS_PORT + 1}`)
