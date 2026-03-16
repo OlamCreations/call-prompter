@@ -43,22 +43,26 @@ document.getElementById('open-ui').addEventListener('click', () => {
 
 document.getElementById('start-server').addEventListener('click', () => {
   const btn = document.getElementById('start-server')
-  // Try to start server via a known local script runner
   fetch(SERVER_HTTP + '/status', { signal: AbortSignal.timeout(2000) })
     .then(() => {
       btn.textContent = 'Already Running'
-      setTimeout(() => { btn.textContent = 'Start Server' }, 2000)
+      btn.style.color = '#0D9488'
+      setTimeout(() => { btn.textContent = 'Start Server'; btn.style.color = '' }, 2000)
     })
     .catch(() => {
-      btn.textContent = 'Starting...'
-      // Open terminal with server command
-      try {
-        chrome.tabs.create({ url: 'https://github.com/OlamCreations/call-prompter#quick-start-demo-mode' })
-      } catch {
-        window.open('https://github.com/OlamCreations/call-prompter#quick-start-demo-mode')
-      }
-      btn.textContent = 'See terminal instructions'
-      setTimeout(() => { btn.textContent = 'Start Server' }, 3000)
+      // Try restart endpoint first (if server was running but stuck)
+      fetch(SERVER_HTTP + '/restart', { method: 'POST', signal: AbortSignal.timeout(2000) })
+        .then(() => {
+          btn.textContent = 'Restarting...'
+          setTimeout(() => location.reload(), 2000)
+        })
+        .catch(() => {
+          // Server truly down — show instructions
+          btn.textContent = 'Not Running'
+          btn.style.color = '#E06060'
+          info.innerHTML = '<strong>Start the server:</strong><br><code>Double-click start.bat</code><br>or run: <code>bun server.mjs</code>'
+          setTimeout(() => { btn.textContent = 'Start Server'; btn.style.color = '' }, 4000)
+        })
     })
 })
 
