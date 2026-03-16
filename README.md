@@ -170,6 +170,19 @@ Every 15 seconds, the server:
 
 The prompter auto-detects the call language. Google Meet captions handle the transcription in the spoken language (English, French, German, Spanish, etc.), and Claude analyzes in that language while providing insights in your preferred language.
 
+## For LLMs and AI agents
+
+This repo includes `llms.txt` — a structured context file for AI agents working with this codebase.
+
+If you're using Claude Code, Codex, Cursor, or any AI coding assistant:
+
+```bash
+# Point your agent to the context file
+cat llms.txt
+```
+
+Common agent tasks are documented there: switching LLM providers, adding new insight types, supporting other platforms (Zoom, Teams), deploying as a web service.
+
 ## License
 
 MIT — Olam Creations

@@ -158,20 +158,20 @@ async function captureLoop() {
 async function analyzeChunk(chunk) {
   const history = chunks.slice(-10).map(c => c.text).join('\n')
 
-  const prompt = `Tu es un co-pilote de vente en temps réel. Analyse ce dernier chunk de conversation.
+  const prompt = `You are a real-time sales co-pilot. Analyze this latest conversation chunk.
 
 Prospect: ${prospect}
-Contexte: ${context}
+Context: ${context}
 ${brief ? 'Brief: ' + brief : ''}
 
-Dernier chunk (15s):
+Latest chunk (15s):
 ${chunk.text}
 
-Historique récent:
+Recent history:
 ${history}
 
-Réponds en JSON strict (pas de markdown, pas de backticks):
-{"keywords":["mot1","mot2"],"sentiment":"hot|warm|cool|cold","insight":"observation clé","suggestion":"action pour Jonas","objection_detected":"ou null","objection_response":"ou null","budget_signal":"ou null","closing_opportunity":false,"closing_script":"ou null","danger":"ou null"}`
+Respond in strict JSON (no markdown, no backticks):
+{"keywords":["word1","word2"],"sentiment":"hot|warm|cool|cold","insight":"key observation","suggestion":"what the seller should do NOW","objection_detected":"or null","objection_response":"or null","budget_signal":"or null","closing_opportunity":false,"closing_script":"or null","danger":"or null"}`
 
   try {
     const result = execFileSync('claude', ['-p', prompt, '--output-format', 'text'], {
@@ -234,40 +234,40 @@ Réponds en JSON strict (pas de markdown, pas de backticks):
 function demoLoop() {
   const scenarios = [
     () => {
-      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'On utilise Excel pour tout gérer, c\'est devenu ingérable avec 50 appels d\'offres par semaine...' })
+      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'Right now our team spends about 15 hours a week on manual data entry across three different systems...' })
       setTimeout(() => {
-        broadcast({ type: 'keyword', words: ['Excel', 'ingérable', '50 AO/semaine'] })
+        broadcast({ type: 'keyword', words: ['manual data entry', '15h/week', 'three systems'] })
         broadcast({ type: 'sentiment', level: 'warm' })
-        broadcast({ type: 'suggestion', text: 'Quantifie la douleur : "50 AO × combien de temps par AO ?"' })
+        broadcast({ type: 'suggestion', text: 'Quantify the cost: "15 hours at your team\'s rate, that\'s roughly $3,000/month on copy-paste work?"' })
       }, 2000)
     },
     () => {
-      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'Chaque AO prend environ 2 heures à analyser, et on en rate la moitié...' })
+      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'Yeah probably around $3,000-4,000 if you count the errors and rework too...' })
       setTimeout(() => {
-        broadcast({ type: 'budget', text: '50 AO × 2h = 100h/semaine → ~12 000€/mois en temps perdu' })
-        broadcast({ type: 'insight', text: 'Pain point massif. 50% de taux de perte = peur de rater des opportunités' })
+        broadcast({ type: 'budget', text: '$3,000-4,000/month current cost -> your solution at $299/month = 10x ROI' })
+        broadcast({ type: 'insight', text: 'Massive pain point. Error cost on top of time cost = strong urgency signal.' })
         broadcast({ type: 'sentiment', level: 'hot' })
       }, 2000)
     },
     () => {
-      broadcast({ type: 'transcript', speaker: 'Jonas', text: 'Notre agent analyse les AO en 30 secondes et vous alerte uniquement sur ceux qui matchent votre profil...' })
+      broadcast({ type: 'transcript', speaker: 'You', text: 'We can automate all three integrations. Most teams are live within a week...' })
       setTimeout(() => {
-        broadcast({ type: 'closing', text: 'Agent à 500€/mois vs 12 000€ de temps perdu = ROI 24x. "On peut commencer dès lundi."' })
+        broadcast({ type: 'closing', text: '"For your volume, $299/month vs $4,000 wasted = instant ROI. Want to start a pilot this week?"' })
       }, 1500)
     },
     () => {
-      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'C\'est intéressant mais il faut que j\'en parle en interne d\'abord...' })
+      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'That sounds interesting but I need to run this by my CTO first...' })
       setTimeout(() => {
-        broadcast({ type: 'danger', text: '"En parler en interne" = signal de fuite. Verrouille la suite.' })
-        broadcast({ type: 'suggestion', text: '"Je comprends. Quand est votre prochaine réunion d\'équipe ? Je peux préparer un résumé pour votre direction."' })
+        broadcast({ type: 'danger', text: '"Run by my CTO" = decision delayed. Lock down a follow-up NOW.' })
+        broadcast({ type: 'suggestion', text: '"Totally get it. When is your next sync with your CTO? I can send a technical one-pager."' })
         broadcast({ type: 'sentiment', level: 'cool' })
       }, 2000)
     },
     () => {
-      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'En fait on a une réunion jeudi, si vous pouvez m\'envoyer un récap...' })
+      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'We have a standup Thursday actually. If you could send something before that...' })
       setTimeout(() => {
-        broadcast({ type: 'insight', text: 'Il revient ! Bon signe. Le prospect cherche un allié pour convaincre en interne.' })
-        broadcast({ type: 'suggestion', text: '"Parfait, je vous envoie ça ce soir. Et si ça passe jeudi, on active votre agent vendredi."' })
+        broadcast({ type: 'insight', text: 'Prospect wants to champion this internally. Send the brief tonight.' })
+        broadcast({ type: 'suggestion', text: '"Perfect. I\'ll send a one-pager tonight. Want to book a 15-min call with your CTO on Friday?"' })
         broadcast({ type: 'sentiment', level: 'warm' })
       }, 2000)
     },

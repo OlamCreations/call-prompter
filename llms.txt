@@ -1,0 +1,61 @@
+# Call Prompter — Context for LLMs and AI Agents
+
+## What this project does
+
+Call Prompter is a real-time AI sales co-pilot for Google Meet calls. It captures live captions via Chrome DevTools Protocol (CDP), analyzes conversation chunks every 15 seconds using an LLM, and streams actionable sales insights to a terminal-style WebSocket UI.
+
+## Architecture
+
+```
+Chrome (Google Meet with captions enabled)
+  → Chrome CDP (port 9222) reads caption DOM elements every 15s
+  → server.mjs deduplicates chunks, maintains conversation history
+  → Claude CLI analyzes each chunk with full context
+  → WebSocket (port 4242) broadcasts structured JSON messages
+  → ui.html renders insights in real-time (color-coded by type)
+```
+
+## File structure
+
+| File | Purpose | Language |
+|------|---------|----------|
+| server.mjs | WebSocket server, CDP caption capture, LLM analysis loop, demo mode | JavaScript (ESM) |
+| ui.html | Terminal-style prompter UI, sidebar, controls, responsive | HTML/CSS/JS (single file) |
+| watch.mjs | Auto-detect Google Meet tabs via CDP, auto-start/stop prompter | JavaScript (ESM) |
+| setup.mjs | Configure Chrome to launch with CDP flag (Win/Mac/Linux) | JavaScript (ESM) |
+| cli.mjs | CLI entry point, routes to server or watch mode | JavaScript (ESM) |
+
+## Key concepts
+
+1. **CDP Caption Capture**: Connects to Chrome's remote debugging protocol, finds Meet tabs, evaluates JS to extract caption DOM elements (selectors: `[jsname="tgaKEf"]`, `[data-message-text]`, `.iOzk7`, `.TBMuR span`).
+
+2. **Chunk Analysis**: Each 15s chunk is sent to Claude with conversation history (last 10 chunks) and prospect context. Claude returns structured JSON with: keywords, sentiment, suggestion, objection/response, budget signals, closing opportunity, danger alerts.
+
+3. **WebSocket Message Types**: `transcript`, `insight`, `suggestion`, `closing`, `danger`, `objection`, `sentiment`, `keyword`, `budget`, `system`.
+
+4. **Demo Mode**: `--demo` flag runs without Chrome/CDP, cycles through realistic sales scenarios for testing the UI.
+
+5. **Watch Mode**: Polls `http://127.0.0.1:9222/json` every 5s for `meet.google.com` tabs. Auto-starts prompter when detected, stops when tab closes.
+
+## How to modify
+
+- **Change LLM**: Replace the `claude -p` call in `analyzeChunk()` (server.mjs) with any LLM CLI or API call. The prompt expects JSON output.
+- **Change analysis interval**: Modify `CAPTURE_INTERVAL_MS` (default 15000ms).
+- **Add new insight types**: Add a case in `handleMessage()` (ui.html) and corresponding CSS class.
+- **Change Meet caption selectors**: Update the `expression` string in `captureCaption()` if Google changes their DOM.
+- **Add new platforms**: Fork `captureCaption()` to support Zoom, Teams, etc. by targeting their caption DOM elements.
+
+## Dependencies
+
+- Runtime: Bun >= 1.0 or Node.js >= 20
+- Chrome with `--remote-debugging-port=9222`
+- Claude Code CLI (for LLM analysis in live mode)
+- No npm packages required (uses built-in WebSocket from Bun)
+
+## Common agent tasks
+
+- "Add support for Zoom": Create a new capture function targeting Zoom's caption DOM, add platform detection in the capture loop.
+- "Use GPT instead of Claude": Replace `execFileSync('claude', ...)` in `analyzeChunk()` with an OpenAI API call. Keep the same JSON output format.
+- "Add a new insight type": Add the type to the analysis prompt, add a `case` in `handleMessage()`, add CSS styling.
+- "Make it work without Chrome": Implement audio capture via system audio device + Whisper STT instead of CDP caption scraping.
+- "Deploy as a web service": Serve ui.html via the WebSocket server (add HTTP handler), containerize with Docker.
