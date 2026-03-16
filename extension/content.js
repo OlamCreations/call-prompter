@@ -180,14 +180,27 @@ function processCaption(text) {
 
 const observer = new MutationObserver(() => scanForCaptions())
 
+let pollInterval = null
+
 function start() {
   observer.observe(document.body, { childList: true, subtree: true, characterData: true })
-  setInterval(scanForCaptions, 800)
+  pollInterval = setInterval(() => {
+    // Stop if extension was reloaded (context invalidated)
+    try { chrome.runtime.id } catch { cleanup(); return }
+    scanForCaptions()
+  }, 800)
   log('Observer + poll started. Scanning for captions every 800ms...')
   log('If no captions appear, make sure:')
   log('  1. You are in a Meet call (not the lobby)')
   log('  2. CC button is enabled (bottom bar)')
   log('  3. You or someone is speaking')
+}
+
+function cleanup() {
+  warn('Extension context invalidated — cleaning up. Refresh page (F5) to restart.')
+  if (pollInterval) clearInterval(pollInterval)
+  observer.disconnect()
+  if (ws) try { ws.close() } catch {}
 }
 
 // ─── Status for popup ───────────────────────────────────────
