@@ -113,8 +113,10 @@ const httpServer = Bun?.serve?.({
   port: WS_PORT + 1,
   fetch(req) {
     const url = new URL(req.url)
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET' }
+    if (req.method === 'OPTIONS') return new Response(null, { headers: cors })
     if (url.pathname === '/status') {
-      return Response.json({ ok: true, connected: clients.size, prospect, context, provider, chunks: chunks.length, sentiment: currentSentiment })
+      return Response.json({ ok: true, connected: clients.size, prospect, context, provider, chunks: chunks.length, sentiment: currentSentiment }, { headers: cors })
     }
     try {
       const uiPath = join(__dirname, 'ui.html')
