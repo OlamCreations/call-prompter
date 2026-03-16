@@ -88,6 +88,7 @@ function sendCaption(text) {
 // ─── Caption detection ──────────────────────────────────────
 
 const GARBAGE_RE = /^(arrow_downward|arrow_upward|aller en bas|go to bottom|scroll down|vous|you|meet|more_vert|present_to_all|mic_off|mic|videocam_off|videocam|call_end|chat|people|info|close|cancel|check)$/i
+const MENU_RE = /BÊTA|Afrique du Sud|Taille de police|Couleur de la police|Ouvrir les paramètres|Caption settings|Font size|Font color/i
 
 function cleanText(raw) {
   return raw
@@ -137,7 +138,7 @@ function scanForCaptions() {
     if (el.querySelector('button, input, [role="button"]')) continue
 
     const text = cleanText(el.innerText || '')
-    if (text.length > 5 && text.length < 500 && text.includes(' ')) {
+    if (text.length > 5 && text.length < 200 && text.includes(' ') && !MENU_RE.test(text)) {
       if (scanCount <= 5) log('NUCLEAR fallback found text at bottom of screen')
       return processCaption(text)
     }
@@ -164,6 +165,7 @@ function extractFromSelector(sel) {
 
 let currentCaption = ''
 function processCaption(text) {
+  if (text.length > 200 || MENU_RE.test(text)) return
   if (text === currentCaption) return
   currentCaption = text
 

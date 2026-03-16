@@ -234,7 +234,7 @@ let lastCaptionText = ''
 let captionDebounce = null
 let pendingCaption = ''
 
-const GARBAGE_RE = /arrow_downward|arrow_upward|aller en bas|go to bottom|scroll down/gi
+const GARBAGE_RE = /arrow_downward|arrow_upward|aller en bas|go to bottom|scroll down|BÊTA|Taille de police|Couleur de la police|Font size|Font color|Caption settings|Ouvrir les paramètres/gi
 
 function cleanCaption(raw) {
   return raw
@@ -255,7 +255,7 @@ async function getCdpTargets() {
 
 function onCaptionReceived(raw) {
   const text = cleanCaption(raw)
-  if (!text || text.length < 3) return
+  if (!text || text.length < 3 || text.length > 300) return
   if (text === lastCaptionText) return
   console.log(`  [DEBOUNCE] queued: "${text.slice(0, 60)}"`)
 
