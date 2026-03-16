@@ -4,6 +4,7 @@ const statusText = document.getElementById('status-text')
 const info = document.getElementById('info')
 const stats = document.getElementById('stats')
 
+// Check server status
 fetch(SERVER_HTTP + '/status', { signal: AbortSignal.timeout(3000) })
   .then(r => r.json())
   .then(data => {
@@ -22,25 +23,28 @@ fetch(SERVER_HTTP + '/status', { signal: AbortSignal.timeout(3000) })
     document.getElementById('open-ui').disabled = true
   })
 
-chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-  const tab = tabs[0]
-  if (!tab?.url?.includes('meet.google.com')) {
-    const meetNote = document.createElement('div')
-    meetNote.className = 'info'
-    meetNote.textContent = 'Open a Google Meet call to start capturing captions.'
-    meetNote.style.color = '#D8A15A'
-    info.after(meetNote)
-  }
-})
+// Check if on Meet tab
+try {
+  chrome?.tabs?.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs?.[0]
+    if (tab && !tab.url?.includes('meet.google.com')) {
+      const meetNote = document.createElement('div')
+      meetNote.className = 'info'
+      meetNote.textContent = 'Open a Google Meet call to start capturing captions.'
+      meetNote.style.color = '#D8A15A'
+      info.after(meetNote)
+    }
+  })
+} catch {}
 
 document.getElementById('open-ui').addEventListener('click', () => {
-  chrome.tabs.create({ url: SERVER_HTTP })
+  try { chrome.tabs.create({ url: SERVER_HTTP }) } catch { window.open(SERVER_HTTP) }
+})
+
+document.getElementById('settings').addEventListener('click', () => {
+  window.location.href = 'settings.html'
 })
 
 document.getElementById('help').addEventListener('click', () => {
-  chrome.tabs.create({ url: 'https://github.com/OlamCreations/call-prompter' })
-})
-
-document.getElementById('settings')?.addEventListener('click', () => {
-  window.location.href = 'settings.html'
+  try { chrome.tabs.create({ url: 'https://github.com/OlamCreations/call-prompter' }) } catch { window.open('https://github.com/OlamCreations/call-prompter') }
 })
