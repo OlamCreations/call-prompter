@@ -123,7 +123,11 @@ function broadcast(msg) {
   }
 }
 
-// ─── CDP Caption Capture ─────────────────────────────────────
+// ─── CDP Caption Capture (persistent stream) ────────────────
+
+let cdpWs = null
+let cdpConnected = false
+let lastCaptionText = ''
 
 async function getCdpTargets() {
   try {
@@ -135,90 +139,124 @@ async function getCdpTargets() {
   }
 }
 
-async function captureCaption(wsUrl) {
-  return new Promise((resolve) => {
-    try {
-      const ws = new WebSocket(wsUrl)
-      let result = ''
-      let msgId = 1
+function onCaptionReceived(text) {
+  if (!text || text.length < 3) return
+  if (text === lastCaptionText) return
+  lastCaptionText = text
 
-      ws.onopen = () => {
-        // Enable captions container query
-        ws.send(JSON.stringify({
-          id: msgId++,
-          method: 'Runtime.evaluate',
-          params: {
-            expression: `
-              (() => {
-                // Google Meet captions container
-                const captions = document.querySelectorAll('[jsname="tgaKEf"], [data-message-text], .iOzk7, [jscontroller="TEjod"] span, .TBMuR span');
-                if (captions.length === 0) {
-                  // Fallback: look for any caption-like elements
-                  const allSpans = document.querySelectorAll('div[class*="caption"] span, div[class*="subtitle"] span');
-                  return Array.from(allSpans).map(el => el.textContent).filter(Boolean).join(' ');
-                }
-                return Array.from(captions).map(el => el.textContent).filter(Boolean).join(' ');
-              })()
-            `,
-            returnByValue: true,
-          },
-        }))
-      }
+  const chunk = { text, ts: Date.now() }
+  chunks = [...chunks, chunk].slice(-MAX_HISTORY_CHUNKS)
+  broadcast({ type: 'transcript', speaker: 'Meet', text })
 
-      ws.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data)
-          if (msg.result?.result?.value) {
-            result = msg.result.result.value
-          }
-        } catch { /* ignore */ }
-        ws.close()
-      }
-
-      ws.onclose = () => resolve(result)
-      ws.onerror = () => resolve('')
-
-      setTimeout(() => { try { ws.close() } catch {} resolve(result) }, 5000)
-    } catch {
-      resolve('')
-    }
-  })
+  if (hooks.onTranscript) {
+    hooks.onTranscript(chunk).catch(() => {})
+  }
 }
 
-async function captureLoop() {
+async function connectCdpStream() {
   const targets = await getCdpTargets()
   if (targets.length === 0) {
-    broadcast({ type: 'system', text: 'Aucun onglet Google Meet trouvé. Ouvre Meet et active les sous-titres.' })
+    if (cdpConnected) {
+      broadcast({ type: 'system', text: 'Meet tab closed.' })
+      cdpConnected = false
+    }
     return
   }
 
   const wsUrl = targets[0].webSocketDebuggerUrl
-  if (!wsUrl) {
-    broadcast({ type: 'system', text: 'CDP WebSocket non disponible pour Meet.' })
-    return
+  if (!wsUrl || cdpConnected) return
+
+  try {
+    cdpWs = new WebSocket(wsUrl)
+    let msgId = 1
+
+    cdpWs.onopen = () => {
+      cdpConnected = true
+      broadcast({ type: 'system', text: 'Connected to Google Meet (real-time capture)' })
+
+      // Inject MutationObserver that pushes captions via console.log
+      // We listen for Runtime.consoleAPICalled events
+      cdpWs.send(JSON.stringify({ id: msgId++, method: 'Runtime.enable', params: {} }))
+
+      cdpWs.send(JSON.stringify({
+        id: msgId++,
+        method: 'Runtime.evaluate',
+        params: {
+          expression: `
+            (() => {
+              if (window.__captionObserver) return 'ALREADY_RUNNING';
+
+              let lastText = '';
+              const SELECTORS = [
+                '[jsname="tgaKEf"]',
+                '[data-message-text]',
+                '.iOzk7',
+                '[jscontroller="TEjod"] span',
+                '.TBMuR span',
+                'div[class*="caption"] span',
+                'div[class*="subtitle"] span',
+              ];
+
+              function readCaptions() {
+                for (const sel of SELECTORS) {
+                  const els = document.querySelectorAll(sel);
+                  if (els.length > 0) {
+                    const text = Array.from(els).map(el => el.textContent).filter(Boolean).join(' ').trim();
+                    if (text && text !== lastText && text.length > 2) {
+                      lastText = text;
+                      console.log('__CAPTION__' + text);
+                    }
+                    return;
+                  }
+                }
+              }
+
+              // MutationObserver on body — fires on any DOM change (captions appearing)
+              window.__captionObserver = new MutationObserver(() => readCaptions());
+              window.__captionObserver.observe(document.body, {
+                childList: true, subtree: true, characterData: true
+              });
+
+              // Also poll every 500ms as backup
+              window.__captionInterval = setInterval(readCaptions, 500);
+
+              return 'OBSERVER_INSTALLED';
+            })()
+          `,
+          returnByValue: true,
+        },
+      }))
+    }
+
+    cdpWs.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data)
+
+        // Listen for console.log events from our MutationObserver
+        if (msg.method === 'Runtime.consoleAPICalled' && msg.params?.type === 'log') {
+          const text = msg.params.args?.[0]?.value || ''
+          if (text.startsWith('__CAPTION__')) {
+            onCaptionReceived(text.slice('__CAPTION__'.length))
+          }
+        }
+      } catch {}
+    }
+
+    cdpWs.onclose = () => {
+      cdpConnected = false
+      cdpWs = null
+      broadcast({ type: 'system', text: 'CDP disconnected. Reconnecting...' })
+    }
+
+    cdpWs.onerror = () => {
+      try { cdpWs?.close() } catch {}
+    }
+  } catch {
+    cdpConnected = false
   }
-
-  const caption = await captureCaption(wsUrl)
-  if (!caption || caption.length < 5) return
-
-  // Deduplicate: skip if same as last chunk
-  const lastChunk = chunks[chunks.length - 1]
-  if (lastChunk && caption === lastChunk.text) return
-
-  const chunk = { text: caption, ts: Date.now() }
-  chunks = [...chunks, chunk].slice(-MAX_HISTORY_CHUNKS)
-
-  broadcast({ type: 'transcript', speaker: 'Meet', text: caption })
-
-  // Hook: onTranscript
-  if (hooks.onTranscript) {
-    try { await hooks.onTranscript(chunk) } catch {}
-  }
-
-  // Analysis runs on its own interval, not blocking caption capture
 }
 
-// Analysis loop — runs independently from capture, async
+// Analysis loop — runs independently, non-blocking
 let analysisRunning = false
 async function analysisLoop() {
   if (analysisRunning || chunks.length === 0) return
@@ -479,11 +517,12 @@ await loadHooks()
 if (isDemo) {
   demoLoop()
 } else {
-  // Fast caption capture (every 3s) — transcript appears instantly
-  setInterval(captureLoop, CAPTURE_INTERVAL_MS)
-  setTimeout(captureLoop, 2000)
+  // Persistent CDP stream — captions arrive instantly via MutationObserver
+  // Reconnect check every 3s (in case Meet tab opens/closes)
+  setInterval(connectCdpStream, CAPTURE_INTERVAL_MS)
+  setTimeout(connectCdpStream, 1000)
 
-  // Slower LLM analysis (every 15s) — insights appear with slight delay
+  // LLM analysis every 15s — merges recent chunks, non-blocking
   setInterval(analysisLoop, ANALYSIS_INTERVAL_MS)
   setTimeout(analysisLoop, 5000)
 }
