@@ -87,6 +87,40 @@ body {
 #sidebar-toggle:hover { color: #aaa; }
 body.sidebar-hidden #sidebar { display: none; }
 body.sidebar-hidden #sidebar-toggle { right: 0; }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  #sidebar { width: 260px; padding: 12px; font-size: 12px; }
+  #sidebar-toggle { right: 260px; }
+  body.sidebar-hidden #sidebar-toggle { right: 0; }
+  #sidebar .number { font-size: 15px; }
+}
+@media (max-width: 700px) {
+  #main { flex-direction: column; }
+  #sidebar {
+    width: 100%;
+    max-height: 35vh;
+    border-left: none;
+    border-top: 1px solid #1a1a1a;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
+  }
+  #sidebar .section { flex: 1 1 45%; min-width: 140px; }
+  #feed { height: auto; flex: 1; min-height: 0; }
+  #sidebar-toggle { display: none; }
+  #bar { flex-wrap: wrap; height: auto; padding: 8px 16px; gap: 8px; }
+  #bar .size-controls .size-slider { width: 60px; }
+}
+@media (max-width: 480px) {
+  #feed { padding: 12px; }
+  #sidebar .section { flex: 1 1 100%; }
+  #sidebar { max-height: 40vh; }
+  #bar .left { gap: 12px; }
+  #bar .right { gap: 8px; }
+  #bar button { padding: 3px 8px; font-size: 11px; }
+}
 #feed::-webkit-scrollbar { width: 6px; }
 #feed::-webkit-scrollbar-track { background: #111; }
 #feed::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
