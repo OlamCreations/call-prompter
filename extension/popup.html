@@ -15,56 +15,79 @@ h1 { font-size: 14px; font-weight: 400; margin-bottom: 12px; letter-spacing: 1px
 .dot { width: 8px; height: 8px; border-radius: 50%; }
 .dot.on { background: #0D9488; box-shadow: 0 0 6px #0D9488; }
 .dot.off { background: #993333; }
-.info { color: #706862; font-size: 11px; line-height: 1.5; margin-bottom: 12px; }
+.dot.wait { background: #D8A15A; }
+.info { color: #706862; font-size: 11px; line-height: 1.6; margin-bottom: 12px; }
+.info code { background: #1B1613; padding: 2px 6px; border-radius: 4px; font-size: 10px; color: #2DD4BF; }
 a { color: #2DD4BF; text-decoration: none; }
 a:hover { text-decoration: underline; }
 .btn {
-  display: block; width: 100%; padding: 8px;
+  display: block; width: 100%; padding: 8px; margin-bottom: 8px;
   background: rgba(13,148,136,0.1); border: 1px solid rgba(13,148,136,0.2);
   color: #2DD4BF; border-radius: 8px; cursor: pointer;
   font-size: 11px; text-align: center; font-family: inherit;
 }
 .btn:hover { background: rgba(13,148,136,0.2); }
+.btn:disabled { opacity: 0.3; cursor: default; }
+.stats { display: flex; gap: 16px; margin-bottom: 12px; font-size: 10px; color: #706862; }
+.stats span { display: flex; flex-direction: column; align-items: center; }
+.stats .val { font-size: 16px; color: #B7ACA3; font-weight: 500; }
 </style>
 </head>
 <body>
 <h1>CALL PROMPTER</h1>
 <div class="status">
   <div class="dot" id="dot"></div>
-  <span id="status-text">Checking...</span>
+  <span id="status-text">Checking server...</span>
+</div>
+<div class="stats" id="stats" style="display:none">
+  <span><span class="val" id="stat-chunks">0</span>chunks</span>
+  <span><span class="val" id="stat-clients">0</span>clients</span>
+  <span><span class="val" id="stat-sentiment">--</span>sentiment</span>
 </div>
 <div class="info" id="info"></div>
-<button class="btn" id="open-ui" style="margin-bottom: 8px">Open Prompter UI</button>
-<button class="btn" id="help">Setup Guide</button>
+<button class="btn" id="open-ui">Open Prompter UI</button>
+<button class="btn" id="help">GitHub</button>
+
 <script>
+const SERVER_HTTP = 'http://127.0.0.1:4243'
 const dot = document.getElementById('dot')
 const statusText = document.getElementById('status-text')
 const info = document.getElementById('info')
+const stats = document.getElementById('stats')
 
-// Check if on Meet
+// Check server status directly (no content script needed)
+fetch(SERVER_HTTP + '/status', { signal: AbortSignal.timeout(3000) })
+  .then(r => r.json())
+  .then(data => {
+    dot.className = 'dot on'
+    statusText.textContent = 'Server running'
+    info.innerHTML = 'Prospect: <strong>' + data.prospect + '</strong><br>Provider: ' + data.provider
+    stats.style.display = 'flex'
+    document.getElementById('stat-chunks').textContent = data.chunks
+    document.getElementById('stat-clients').textContent = data.connected
+    document.getElementById('stat-sentiment').textContent = data.sentiment
+  })
+  .catch(() => {
+    dot.className = 'dot off'
+    statusText.textContent = 'Server not running'
+    info.innerHTML = 'Start the server first:<br><code>bun server.mjs --prospect="Client"</code>'
+    document.getElementById('open-ui').disabled = true
+  })
+
+// Check if on Meet tab
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   const tab = tabs[0]
-  if (tab?.url?.includes('meet.google.com')) {
-    chrome.tabs.sendMessage(tab.id, { type: 'getStatus' }, (res) => {
-      if (res?.connected) {
-        dot.className = 'dot on'
-        statusText.textContent = 'Connected to server'
-        info.textContent = 'Captions are being captured and analyzed in real-time.'
-      } else {
-        dot.className = 'dot off'
-        statusText.textContent = 'Server not running'
-        info.innerHTML = 'Start the server:<br><code>bun server.mjs --prospect="Client"</code>'
-      }
-    })
-  } else {
-    dot.className = 'dot off'
-    statusText.textContent = 'Not on Google Meet'
-    info.textContent = 'Open a Google Meet call to start capturing captions.'
+  if (!tab?.url?.includes('meet.google.com')) {
+    const meetNote = document.createElement('div')
+    meetNote.className = 'info'
+    meetNote.textContent = 'Open a Google Meet call to start capturing captions.'
+    meetNote.style.color = '#D8A15A'
+    info.after(meetNote)
   }
 })
 
 document.getElementById('open-ui').onclick = () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('../ui.html') })
+  chrome.tabs.create({ url: SERVER_HTTP })
 }
 
 document.getElementById('help').onclick = () => {

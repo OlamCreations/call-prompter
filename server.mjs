@@ -107,6 +107,31 @@ let currentSentiment = 'warm'
 
 // ─── WebSocket Server ────────────────────────────────────────
 
+// ─── HTTP Server (serves UI on http://127.0.0.1:PORT) ───────
+
+const httpServer = Bun?.serve?.({
+  port: WS_PORT + 1,
+  fetch(req) {
+    const url = new URL(req.url)
+    if (url.pathname === '/status') {
+      return Response.json({ ok: true, connected: clients.size, prospect, context, provider, chunks: chunks.length, sentiment: currentSentiment })
+    }
+    try {
+      const uiPath = join(__dirname, 'ui.html')
+      const html = readFileSync(uiPath, 'utf-8')
+      return new Response(html, { headers: { 'Content-Type': 'text/html', 'Access-Control-Allow-Origin': '*' } })
+    } catch {
+      return new Response('UI not found. Place ui.html next to server.mjs', { status: 404 })
+    }
+  },
+}) || null
+
+if (httpServer) {
+  console.log(`  UI HTTP:   http://127.0.0.1:${WS_PORT + 1}`)
+}
+
+// ─── WebSocket Server ────────────────────────────────────────
+
 const wss = new WebSocketServer({ port: WS_PORT })
 const clients = new Set()
 
