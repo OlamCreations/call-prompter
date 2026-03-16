@@ -19,11 +19,16 @@ function updateUI() {
   const g = guides[p] || {}
 
   // Hide all guides, show current
-  document.querySelectorAll('.guide').forEach(el => el.style.display = 'none')
-  if (g.show) document.getElementById(g.show).style.display = 'block'
+  document.querySelectorAll('.guide').forEach(el => el.classList.remove('visible'))
+  const guideEl = g.show ? document.getElementById(g.show) : null
+  if (guideEl) guideEl.classList.add('visible')
 
   // Show/hide key section
   keySection.style.display = g.needsKey ? 'block' : 'none'
+
+  // Show/hide model section (not needed for claude cli)
+  const modelSection = document.getElementById('model-section')
+  if (modelSection) modelSection.style.display = p === 'claude' ? 'none' : 'block'
 
   // Show/hide custom URL
   customSection.className = p === 'custom' ? '' : 'hidden'
