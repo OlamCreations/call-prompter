@@ -200,11 +200,15 @@ wss.on('connection', (ws) => {
   // Accept captions from Chrome extension (no CDP needed)
   ws.on('message', (raw) => {
     try {
-      const msg = JSON.parse(raw)
+      const str = typeof raw === 'string' ? raw : raw.toString()
+      const msg = JSON.parse(str)
       if (msg.type === 'caption' && msg.text) {
+        console.log(`  [CAPTION] ${msg.source || '?'}: "${msg.text.slice(0, 60)}"`)
         onCaptionReceived(msg.text)
       }
-    } catch {}
+    } catch (err) {
+      console.log(`  [WS] parse error: ${err.message}`)
+    }
   })
 
   broadcast({ type: 'system', text: `Prompter active — ${prospect} — ${context}` })
@@ -246,8 +250,10 @@ async function getCdpTargets() {
 
 function onCaptionReceived(raw) {
   const text = cleanCaption(raw)
-  if (!text || text.length < 5) return
+  if (!text || text.length < 3) return
   if (text === lastCaptionText) return
+  console.log(`  [DEBOUNCE] queued: "${text.slice(0, 60)}"`)
+
 
   // Debounce: wait 1.5s for caption to stabilize (avoid partial sends)
   pendingCaption = text
