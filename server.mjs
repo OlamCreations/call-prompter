@@ -126,7 +126,7 @@ let currentSentiment = 'warm'
 
 const httpServer = Bun?.serve?.({
   port: WS_PORT + 1,
-  fetch(req) {
+  async fetch(req) {
     const url = new URL(req.url)
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type' }
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors })
