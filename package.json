@@ -8,6 +8,7 @@
     "call-prompter": "./cli.mjs"
   },
   "scripts": {
+    "setup": "node setup.mjs",
     "start": "bun server.mjs",
     "demo": "bun server.mjs --demo",
     "watch": "bun watch.mjs"

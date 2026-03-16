@@ -53,6 +53,10 @@ Prompter UI (your second screen)
 
 ```
 
+## Demo
+
+https://github.com/user-attachments/assets/demo.webm
+
 ## Quick start
 
 ```bash
@@ -60,27 +64,27 @@ Prompter UI (your second screen)
 git clone https://github.com/OlamCreations/call-prompter
 cd call-prompter
 
+# One-time setup: configure Chrome for caption capture
+node setup.mjs
+
 # Run demo (no Chrome needed)
 bun server.mjs --demo
 
-# Open UI in browser
-# → open ui.html, then double-click to start demo
+# Open UI in browser, double-click to start demo
+open ui.html
 ```
 
 ## Live mode (real Google Meet call)
 
-### 1. Launch Chrome with remote debugging
+### 1. Setup Chrome (one-time)
 
 ```bash
-# macOS
-open -a "Google Chrome" --args --remote-debugging-port=9222
-
-# Windows
-start chrome --remote-debugging-port=9222
-
-# Linux
-google-chrome --remote-debugging-port=9222
+node setup.mjs
 ```
+
+This automatically configures Chrome to enable caption capture. Restart Chrome after setup.
+
+To undo: `node setup.mjs --undo`
 
 ### 2. Join your Google Meet and enable captions (CC button)
 
