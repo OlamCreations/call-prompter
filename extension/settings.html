@@ -3,7 +3,7 @@
 <head>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { width: 320px; background: #0D0B0A; color: #F9F5EF; font-family: 'Segoe UI', sans-serif; padding: 20px; }
+body { width: 360px; background: #0D0B0A; color: #F9F5EF; font-family: 'Segoe UI', sans-serif; padding: 20px; }
 h1 { font-size: 14px; font-weight: 400; margin-bottom: 16px; letter-spacing: 1px; }
 label { display: block; color: #706862; font-size: 11px; margin-bottom: 4px; margin-top: 14px; text-transform: uppercase; letter-spacing: 1px; }
 select, input {
@@ -11,7 +11,9 @@ select, input {
   color: #F9F5EF; border-radius: 8px; font-size: 12px; font-family: inherit; outline: none;
 }
 select:focus, input:focus { border-color: rgba(13,148,136,0.3); }
-.help { color: #4A4440; font-size: 10px; margin-top: 4px; line-height: 1.5; }
+.help { color: #4A4440; font-size: 10px; margin-top: 4px; line-height: 1.6; }
+.help a { color: #2DD4BF; text-decoration: none; }
+.help a:hover { text-decoration: underline; }
 .btn {
   display: block; width: 100%; padding: 10px; margin-top: 20px;
   background: rgba(13,148,136,0.15); border: 1px solid rgba(13,148,136,0.25);
@@ -22,6 +24,15 @@ select:focus, input:focus { border-color: rgba(13,148,136,0.3); }
 .saved { color: #0D9488; font-size: 11px; text-align: center; margin-top: 8px; display: none; }
 .back { color: #706862; font-size: 11px; cursor: pointer; margin-bottom: 12px; }
 .back:hover { color: #2DD4BF; }
+.guide { background: #1B1613; border-radius: 10px; padding: 12px; margin-top: 12px; display: none; }
+.guide-title { color: #D8A15A; font-size: 11px; font-weight: 600; margin-bottom: 8px; }
+.guide ol { color: #B7ACA3; font-size: 11px; line-height: 1.8; padding-left: 16px; }
+.guide code { background: #241E1A; padding: 1px 5px; border-radius: 4px; font-size: 10px; color: #2DD4BF; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin-left: 6px; }
+.tag-free { background: rgba(90,138,111,0.15); color: #5A8A6F; }
+.tag-easy { background: rgba(13,148,136,0.15); color: #2DD4BF; }
+.tag-paid { background: rgba(216,161,90,0.15); color: #D8A15A; }
+.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -30,26 +41,83 @@ select:focus, input:focus { border-color: rgba(13,148,136,0.3); }
 
 <label>AI Provider</label>
 <select id="provider">
+  <option value="ollama">Ollama (Local, free) -- recommended</option>
   <option value="openai">OpenAI (GPT-4o)</option>
   <option value="anthropic">Anthropic (Claude)</option>
-  <option value="ollama">Ollama (Local, free)</option>
   <option value="claude">Claude Code CLI</option>
   <option value="custom">Custom API</option>
 </select>
-<div class="help">OpenAI and Ollama are the easiest to set up.</div>
 
-<label>API Key</label>
-<input type="password" id="api-key" placeholder="sk-... or leave empty for Ollama/Claude CLI">
-<div class="help">Stored locally on your machine. Never sent anywhere except your chosen provider.</div>
+<div class="guide" id="guide-ollama">
+  <div class="guide-title">Ollama Setup <span class="tag tag-free">free</span> <span class="tag tag-easy">easy</span></div>
+  <ol>
+    <li>Download Ollama from <a href="https://ollama.ai" target="_blank">ollama.ai</a></li>
+    <li>Install and open it</li>
+    <li>Open a terminal and run: <code>ollama pull llama3</code></li>
+    <li>Done. No API key needed.</li>
+  </ol>
+</div>
 
-<label>Model (optional)</label>
-<input type="text" id="model" placeholder="gpt-4o-mini (default depends on provider)">
+<div class="guide" id="guide-openai">
+  <div class="guide-title">OpenAI Setup <span class="tag tag-paid">paid</span></div>
+  <ol>
+    <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a></li>
+    <li>Sign in or create an account</li>
+    <li>Click "Create new secret key"</li>
+    <li>Copy the key (starts with <code>sk-</code>)</li>
+    <li>Paste it below</li>
+  </ol>
+</div>
 
-<label>Custom API URL (only for Custom provider)</label>
-<input type="text" id="custom-url" placeholder="https://api.together.xyz/v1/chat/completions">
+<div class="guide" id="guide-anthropic">
+  <div class="guide-title">Anthropic Setup <span class="tag tag-paid">paid</span></div>
+  <ol>
+    <li>Go to <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com/settings/keys</a></li>
+    <li>Sign in or create an account</li>
+    <li>Click "Create Key"</li>
+    <li>Copy the key (starts with <code>sk-ant-</code>)</li>
+    <li>Paste it below</li>
+  </ol>
+</div>
+
+<div class="guide" id="guide-claude">
+  <div class="guide-title">Claude Code CLI <span class="tag tag-easy">no key needed</span></div>
+  <ol>
+    <li>Install: <code>npm install -g @anthropic-ai/claude-code</code></li>
+    <li>Run <code>claude</code> in your terminal</li>
+    <li>It opens your browser to log in — done</li>
+    <li>No API key needed, uses your Claude account</li>
+  </ol>
+</div>
+
+<div class="guide" id="guide-custom">
+  <div class="guide-title">Custom API</div>
+  <ol>
+    <li>Any OpenAI-compatible API works</li>
+    <li>Enter the base URL and API key below</li>
+    <li>Examples: Together AI, Groq, Fireworks, local vLLM</li>
+  </ol>
+</div>
+
+<div id="key-section">
+  <label>API Key</label>
+  <input type="password" id="api-key" placeholder="sk-... (not needed for Ollama or Claude CLI)">
+  <div class="help">Stored locally. Never sent anywhere except your chosen provider.</div>
+</div>
+
+<div id="model-section">
+  <label>Model (optional)</label>
+  <input type="text" id="model" placeholder="">
+  <div class="help" id="model-help"></div>
+</div>
+
+<div id="custom-section" class="hidden">
+  <label>API URL</label>
+  <input type="text" id="custom-url" placeholder="https://api.together.xyz/v1/chat/completions">
+</div>
 
 <button class="btn" id="save">Save Settings</button>
-<div class="saved" id="saved">Settings saved. Restart server to apply.</div>
+<div class="saved" id="saved">Saved. Restart the server to apply.</div>
 
 <script src="settings.js"></script>
 </body>
