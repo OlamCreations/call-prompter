@@ -40,3 +40,7 @@ document.getElementById('open-ui').addEventListener('click', () => {
 document.getElementById('help').addEventListener('click', () => {
   chrome.tabs.create({ url: 'https://github.com/OlamCreations/call-prompter' })
 })
+
+document.getElementById('settings')?.addEventListener('click', () => {
+  window.location.href = 'settings.html'
+})

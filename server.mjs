@@ -34,7 +34,7 @@
 
 import { WebSocketServer } from 'ws'
 import { execFileSync } from 'node:child_process'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -50,13 +50,28 @@ const MAX_HISTORY_CHUNKS = 60
 const args = process.argv.slice(2)
 function getArg(name) { return args.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=') }
 
+// ─── Config file (for non-devs) ──────────────────────────────
+
+let fileConfig = {}
+const configPath = join(__dirname, 'config.json')
+if (existsSync(configPath)) {
+  try { fileConfig = JSON.parse(readFileSync(configPath, 'utf-8')) } catch {}
+}
+
 const isDemo = args.includes('--demo')
-const prospect = getArg('prospect') || 'Unknown'
-const context = getArg('context') || 'Sales call'
+const prospect = getArg('prospect') || fileConfig.prospect || 'Unknown'
+const context = getArg('context') || fileConfig.context || 'Sales call'
 const brief = getArg('brief') || ''
-const provider = getArg('provider') || process.env.PROMPTER_PROVIDER || 'claude'
-const model = getArg('model') || process.env.PROMPTER_MODEL || ''
-const contextFilePath = getArg('context-file') || ''
+const provider = getArg('provider') || process.env.PROMPTER_PROVIDER || fileConfig.provider || 'claude'
+const model = getArg('model') || process.env.PROMPTER_MODEL || fileConfig.model || ''
+const contextFilePath = getArg('context-file') || fileConfig.context_file || ''
+
+// Apply API key from config.json if env var not set
+if (fileConfig.api_key && fileConfig.api_key !== 'sk-paste-your-key-here') {
+  if (provider === 'openai' && !process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = fileConfig.api_key
+  if (provider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) process.env.ANTHROPIC_API_KEY = fileConfig.api_key
+  if (provider === 'custom' && !process.env.CUSTOM_API_KEY) process.env.CUSTOM_API_KEY = fileConfig.api_key
+}
 
 // ─── Context File ────────────────────────────────────────────
 
@@ -113,8 +128,29 @@ const httpServer = Bun?.serve?.({
   port: WS_PORT + 1,
   fetch(req) {
     const url = new URL(req.url)
-    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET' }
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type' }
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors })
+
+    // Save config from extension settings
+    if (url.pathname === '/config' && req.method === 'POST') {
+      try {
+        const body = await req.json()
+        const config = {
+          provider: body.provider || 'openai',
+          model: body.model || '',
+          api_key: body.api_key || '',
+          custom_api_url: body.custom_url || '',
+          prospect: prospect,
+          context: context,
+          context_file: contextFilePath,
+        }
+        writeFileSync(join(__dirname, 'config.json'), JSON.stringify(config, null, 2))
+        return Response.json({ ok: true, message: 'Config saved. Restart server to apply.' }, { headers: cors })
+      } catch (err) {
+        return Response.json({ ok: false, error: err.message }, { status: 400, headers: cors })
+      }
+    }
+
     if (url.pathname === '/status') {
       return Response.json({ ok: true, connected: clients.size, prospect, context, provider, chunks: chunks.length, sentiment: currentSentiment }, { headers: cors })
     }
@@ -483,55 +519,8 @@ async function analyzeChunk(chunk) {
 }
 
 // ─── Demo Mode ───────────────────────────────────────────────
-
-function demoLoop() {
-  const scenarios = [
-    () => {
-      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'Right now our team spends about 15 hours a week on manual data entry across three different systems...' })
-      setTimeout(() => {
-        broadcast({ type: 'keyword', words: ['manual data entry', '15h/week', 'three systems'] })
-        broadcast({ type: 'sentiment', level: 'warm' })
-        broadcast({ type: 'suggestion', text: 'Quantify the cost: "15 hours at your team\'s rate, that\'s roughly $3,000/month on copy-paste work?"' })
-      }, 2000)
-    },
-    () => {
-      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'Yeah probably around $3,000-4,000 if you count the errors and rework too...' })
-      setTimeout(() => {
-        broadcast({ type: 'budget', text: '$3,000-4,000/month current cost -> your solution at $299/month = 10x ROI' })
-        broadcast({ type: 'insight', text: 'Massive pain point. Error cost on top of time cost = strong urgency signal.' })
-        broadcast({ type: 'sentiment', level: 'hot' })
-      }, 2000)
-    },
-    () => {
-      broadcast({ type: 'transcript', speaker: 'You', text: 'We can automate all three integrations. Most teams are live within a week...' })
-      setTimeout(() => {
-        broadcast({ type: 'closing', text: '"For your volume, $299/month vs $4,000 wasted = instant ROI. Want to start a pilot this week?"' })
-      }, 1500)
-    },
-    () => {
-      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'That sounds interesting but I need to run this by my CTO first...' })
-      setTimeout(() => {
-        broadcast({ type: 'danger', text: '"Run by my CTO" = decision delayed. Lock down a follow-up NOW.' })
-        broadcast({ type: 'suggestion', text: '"Totally get it. When is your next sync with your CTO? I can send a technical one-pager."' })
-        broadcast({ type: 'sentiment', level: 'cool' })
-      }, 2000)
-    },
-    () => {
-      broadcast({ type: 'transcript', speaker: 'Prospect', text: 'We have a standup Thursday actually. If you could send something before that...' })
-      setTimeout(() => {
-        broadcast({ type: 'insight', text: 'Prospect wants to champion this internally. Send the brief tonight.' })
-        broadcast({ type: 'suggestion', text: '"Perfect. I\'ll send a one-pager tonight. Want to book a 15-min call with your CTO on Friday?"' })
-        broadcast({ type: 'sentiment', level: 'warm' })
-      }, 2000)
-    },
-  ]
-
-  let i = 0
-  setInterval(() => {
-    scenarios[i % scenarios.length]()
-    i++
-  }, 8000)
-}
+// Demo is now UI-only (via DEMO button in the browser).
+// Server --demo flag just skips CDP connection.
 
 // ─── Main ────────────────────────────────────────────────────
 
@@ -552,9 +541,7 @@ console.log(`  Double-click in UI to toggle demo mode\n`)
 
 await loadHooks()
 
-if (isDemo) {
-  demoLoop()
-} else {
+if (!isDemo) {
   // Persistent CDP stream — captions arrive instantly via MutationObserver
   // Reconnect check every 3s (in case Meet tab opens/closes)
   setInterval(connectCdpStream, CAPTURE_INTERVAL_MS)
