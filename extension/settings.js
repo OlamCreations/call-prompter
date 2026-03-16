@@ -85,10 +85,12 @@ document.getElementById('install-claude')?.addEventListener('click', () => {
     .then(r => r.json())
     .then(data => {
       if (data.ok) {
-        btn.textContent = 'Installed'
+        btn.textContent = data.already_installed ? 'Already Installed' : 'Installed'
         btn.style.color = '#0D9488'
         btn.style.borderColor = 'rgba(13,148,136,0.3)'
-        status.textContent = 'Claude Code CLI installed. Open a terminal and run: claude'
+        status.textContent = data.already_installed
+          ? 'Claude Code CLI is already installed (' + data.version + '). Open a terminal and run: claude'
+          : 'Claude Code CLI installed. Open a terminal and run: claude'
         status.style.color = '#0D9488'
       } else {
         btn.textContent = 'Install Failed'

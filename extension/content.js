@@ -4,28 +4,47 @@
  * Injected into Google Meet pages. Reads live captions from the DOM
  * and sends them to the local Call Prompter server via WebSocket.
  *
- * No CDP required. No special Chrome flags. Just install and go.
+ * Debounces captions (waits for text to stabilize before sending)
+ * and filters out Meet UI garbage (arrows, buttons, speaker labels).
  */
 
 const WS_URL = 'ws://127.0.0.1:4242'
+
+// Caption container selectors (Google Meet specific)
 const CAPTION_SELECTORS = [
   '[jsname="tgaKEf"]',
   '[data-message-text]',
   '.iOzk7',
-  '[jscontroller="TEjod"] span',
-  '.TBMuR span',
-  'div[class*="caption"] span',
-  'div[class*="subtitle"] span',
+  '.TBMuR',
+  'div[class*="caption"]',
+]
+
+// Garbage patterns to filter out (Meet UI elements)
+const GARBAGE_PATTERNS = [
+  /arrow_downward/i,
+  /arrow_upward/i,
+  /aller en bas/i,
+  /go to bottom/i,
+  /scroll down/i,
+  /^vous$/i,
+  /^you$/i,
+  /^meet$/i,
+  /^[a-z]{1,3}$/i,          // Single short words that are just fragments
+  /^\s*$/,                    // Empty/whitespace
 ]
 
 let ws = null
-let lastText = ''
 let connected = false
 let reconnectTimer = null
+let lastSentText = ''
+let debounceTimer = null
+let currentCaption = ''
 
 function log(msg) {
   console.log(`[Call Prompter] ${msg}`)
 }
+
+// ─── WebSocket ───────────────────────────────────────────────
 
 function connectWs() {
   if (ws && ws.readyState <= 1) return
@@ -36,65 +55,115 @@ function connectWs() {
     ws.onopen = () => {
       connected = true
       log('Connected to prompter server')
-      updateBadge('ON')
     }
 
     ws.onclose = () => {
       connected = false
-      log('Disconnected. Retrying in 5s...')
-      updateBadge('OFF')
       clearTimeout(reconnectTimer)
       reconnectTimer = setTimeout(connectWs, 5000)
     }
 
-    ws.onerror = () => {
-      ws.close()
-    }
+    ws.onerror = () => ws.close()
   } catch {
-    log('Server not running. Start with: bun server.mjs')
-    updateBadge('OFF')
     clearTimeout(reconnectTimer)
     reconnectTimer = setTimeout(connectWs, 5000)
   }
 }
 
-function updateBadge(status) {
-  try {
-    chrome.runtime?.sendMessage({ type: 'badge', status })
-  } catch {}
+// ─── Caption cleaning ────────────────────────────────────────
+
+function cleanCaption(raw) {
+  // Split into lines/segments
+  const parts = raw.split(/\n|\r/).map(s => s.trim()).filter(Boolean)
+
+  const cleaned = parts.filter(part => {
+    // Remove garbage patterns
+    for (const pattern of GARBAGE_PATTERNS) {
+      if (pattern.test(part)) return false
+    }
+    // Remove very short fragments (likely UI artifacts)
+    if (part.length < 4) return false
+    return true
+  })
+
+  return cleaned.join(' ').replace(/\s+/g, ' ').trim()
 }
+
+function extractSpeaker(container) {
+  // Try to find speaker name from Meet's caption structure
+  // Meet shows "Speaker Name" before the caption text
+  const nameEl = container.querySelector('[class*="name"], [class*="speaker"], [jsname]')
+  if (nameEl && nameEl.textContent.length < 30 && nameEl.textContent.length > 1) {
+    const name = nameEl.textContent.trim()
+    // Filter out known non-name elements
+    if (!GARBAGE_PATTERNS.some(p => p.test(name)) && name.length > 1) {
+      return name
+    }
+  }
+  return null
+}
+
+// ─── Caption reading with debounce ───────────────────────────
 
 function readCaptions() {
   for (const sel of CAPTION_SELECTORS) {
-    const els = document.querySelectorAll(sel)
-    if (els.length > 0) {
-      const text = Array.from(els)
-        .map(el => el.textContent)
-        .filter(Boolean)
-        .join(' ')
-        .trim()
+    const containers = document.querySelectorAll(sel)
+    if (containers.length === 0) continue
 
-      if (text && text !== lastText && text.length > 2) {
-        lastText = text
-        sendCaption(text)
+    // Get text from all caption containers
+    const texts = []
+    let speaker = null
+
+    containers.forEach(container => {
+      // Try to extract speaker
+      if (!speaker) speaker = extractSpeaker(container)
+
+      // Get all text nodes, skip nested interactive elements
+      const spans = container.querySelectorAll('span')
+      if (spans.length > 0) {
+        spans.forEach(span => {
+          const t = span.textContent.trim()
+          if (t) texts.push(t)
+        })
+      } else {
+        const t = container.textContent.trim()
+        if (t) texts.push(t)
       }
-      return
+    })
+
+    const raw = texts.join(' ')
+    const cleaned = cleanCaption(raw)
+
+    if (cleaned && cleaned.length > 3 && cleaned !== currentCaption) {
+      currentCaption = cleaned
+
+      // Debounce: wait 1.5s for caption to stabilize before sending
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        if (currentCaption && currentCaption !== lastSentText) {
+          sendCaption(currentCaption, speaker)
+          lastSentText = currentCaption
+        }
+      }, 1500)
     }
+    return
   }
 }
 
-function sendCaption(text) {
+function sendCaption(text, speaker) {
   if (!connected || !ws || ws.readyState !== 1) return
 
   ws.send(JSON.stringify({
     type: 'caption',
     text,
+    speaker: speaker || 'Meet',
     ts: Date.now(),
     source: 'extension',
   }))
 }
 
-// MutationObserver — fires on any DOM change (captions appearing)
+// ─── MutationObserver ────────────────────────────────────────
+
 const observer = new MutationObserver(() => readCaptions())
 
 function startObserving() {
@@ -104,28 +173,29 @@ function startObserving() {
     characterData: true,
   })
 
-  // Backup poll every 500ms
-  setInterval(readCaptions, 500)
+  // Backup poll every 2s (less aggressive)
+  setInterval(readCaptions, 2000)
 
-  log('Caption observer started')
+  log('Caption observer started (with 1.5s debounce)')
 }
 
-// Notify popup of current state
+// ─── Message handler ─────────────────────────────────────────
+
 chrome.runtime?.onMessage?.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'getStatus') {
     sendResponse({
       connected,
-      lastText: lastText.slice(0, 50),
+      lastText: lastSentText.slice(0, 50),
       url: window.location.href,
     })
   }
 })
 
-// Start
+// ─── Start ───────────────────────────────────────────────────
+
 log('Initializing on ' + window.location.href)
 connectWs()
 
-// Wait for Meet to fully load before observing
 if (document.readyState === 'complete') {
   startObserving()
 } else {

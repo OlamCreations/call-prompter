@@ -151,8 +151,14 @@ const httpServer = Bun?.serve?.({
       }
     }
 
-    // Install Claude CLI from extension settings
+    // Check + Install Claude CLI from extension settings
     if (url.pathname === '/install-claude' && req.method === 'POST') {
+      // Check if already installed
+      try {
+        const version = execFileSync('claude', ['--version'], { timeout: 5000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim()
+        return Response.json({ ok: true, already_installed: true, version, output: `Claude Code CLI already installed: ${version}` }, { headers: cors })
+      } catch { /* not installed, proceed */ }
+
       try {
         const result = execFileSync('npm', ['install', '-g', '@anthropic-ai/claude-code'], {
           timeout: 120000,
@@ -216,6 +222,17 @@ function broadcast(msg) {
 let cdpWs = null
 let cdpConnected = false
 let lastCaptionText = ''
+let captionDebounce = null
+let pendingCaption = ''
+
+const GARBAGE_RE = /arrow_downward|arrow_upward|aller en bas|go to bottom|scroll down/gi
+
+function cleanCaption(raw) {
+  return raw
+    .replace(GARBAGE_RE, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 async function getCdpTargets() {
   try {
@@ -227,18 +244,26 @@ async function getCdpTargets() {
   }
 }
 
-function onCaptionReceived(text) {
-  if (!text || text.length < 3) return
+function onCaptionReceived(raw) {
+  const text = cleanCaption(raw)
+  if (!text || text.length < 5) return
   if (text === lastCaptionText) return
-  lastCaptionText = text
 
-  const chunk = { text, ts: Date.now() }
-  chunks = [...chunks, chunk].slice(-MAX_HISTORY_CHUNKS)
-  broadcast({ type: 'transcript', speaker: 'Meet', text })
+  // Debounce: wait 1.5s for caption to stabilize (avoid partial sends)
+  pendingCaption = text
+  clearTimeout(captionDebounce)
+  captionDebounce = setTimeout(() => {
+    if (pendingCaption && pendingCaption !== lastCaptionText) {
+      lastCaptionText = pendingCaption
+      const chunk = { text: pendingCaption, ts: Date.now() }
+      chunks = [...chunks, chunk].slice(-MAX_HISTORY_CHUNKS)
+      broadcast({ type: 'transcript', speaker: 'Meet', text: pendingCaption })
 
-  if (hooks.onTranscript) {
-    hooks.onTranscript(chunk).catch(() => {})
-  }
+      if (hooks.onTranscript) {
+        hooks.onTranscript(chunk).catch(() => {})
+      }
+    }
+  }, 1500)
 }
 
 async function connectCdpStream() {
