@@ -5,38 +5,99 @@
  *
  * 1. Connects to Google Meet via Chrome CDP (port 9222)
  * 2. Captures live captions every ~15 seconds
- * 3. Sends chunks to Claude for real-time analysis
+ * 3. Sends chunks to any LLM for real-time analysis
  * 4. Streams insights to UI via WebSocket (port 4242)
  *
  * Usage:
  *   bun server.mjs --prospect="Company X" --context="Discovery call"
- *   bun server.mjs --demo   (fake data for testing UI)
+ *   bun server.mjs --provider=openai --model=gpt-4o
+ *   bun server.mjs --provider=ollama --model=llama3
+ *   bun server.mjs --context-file=my-playbook.md
+ *   bun server.mjs --demo
+ *
+ * Providers:
+ *   claude       Claude Code CLI (default, no API key needed)
+ *   anthropic    Claude API (needs ANTHROPIC_API_KEY)
+ *   openai       OpenAI API (needs OPENAI_API_KEY)
+ *   ollama       Local Ollama (needs ollama running)
+ *   custom       Any OpenAI-compatible API (needs CUSTOM_API_URL + CUSTOM_API_KEY)
+ *
+ * Context file:
+ *   A markdown file with your business context, offers, pricing, talking points.
+ *   Injected into every analysis prompt so the AI knows YOUR product.
  *
  * Requirements:
  *   - Chrome running with --remote-debugging-port=9222
  *   - Google Meet open with captions enabled
- *   - Claude Code CLI available (or ANTHROPIC_API_KEY set)
+ *   - One of: Claude CLI, ANTHROPIC_API_KEY, OPENAI_API_KEY, ollama, CUSTOM_API_URL
  */
 
 import { WebSocketServer } from 'ws'
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const WS_PORT = Number(process.env.PROMPTER_PORT) || 4242
-const CDP_PORT = 9222
-const CAPTURE_INTERVAL_MS = 15000
+const CDP_PORT = Number(process.env.CDP_PORT) || 9222
+const CAPTURE_INTERVAL_MS = Number(process.env.CAPTURE_INTERVAL) || 3000
+const ANALYSIS_INTERVAL_MS = Number(process.env.ANALYSIS_INTERVAL) || 15000
 const MAX_HISTORY_CHUNKS = 60
 
 // ─── Args ────────────────────────────────────────────────────
 
 const args = process.argv.slice(2)
+function getArg(name) { return args.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=') }
+
 const isDemo = args.includes('--demo')
-const prospect = args.find(a => a.startsWith('--prospect='))?.split('=')[1] || 'Unknown'
-const context = args.find(a => a.startsWith('--context='))?.split('=')[1] || 'Sales call'
-const brief = args.find(a => a.startsWith('--brief='))?.split('=')[1] || ''
+const prospect = getArg('prospect') || 'Unknown'
+const context = getArg('context') || 'Sales call'
+const brief = getArg('brief') || ''
+const provider = getArg('provider') || process.env.PROMPTER_PROVIDER || 'claude'
+const model = getArg('model') || process.env.PROMPTER_MODEL || ''
+const contextFilePath = getArg('context-file') || ''
+
+// ─── Context File ────────────────────────────────────────────
+
+let userContext = ''
+if (contextFilePath && existsSync(contextFilePath)) {
+  userContext = readFileSync(contextFilePath, 'utf-8').trim()
+} else if (existsSync(join(__dirname, 'context.md'))) {
+  userContext = readFileSync(join(__dirname, 'context.md'), 'utf-8').trim()
+}
+
+// ─── Hooks (extend with your own pipelines) ─────────────────
+
+const hooksPath = getArg('hooks') || (existsSync(join(__dirname, 'hooks.mjs')) ? join(__dirname, 'hooks.mjs') : '')
+let hooks = {
+  // Called before LLM analysis. Return enriched context string (e.g. from RAG).
+  // (chunk, history, userContext) => Promise<string>
+  beforeAnalysis: null,
+
+  // Called after LLM returns parsed insights. Mutate or enrich insights.
+  // (parsed, chunk, history) => Promise<object>
+  afterAnalysis: null,
+
+  // Called on every new transcript chunk. Use for logging, streaming, etc.
+  // (chunk) => Promise<void>
+  onTranscript: null,
+
+  // Called when call ends (watch mode). Use for post-call summary pipelines.
+  // (fullTranscript, insights) => Promise<void>
+  onCallEnd: null,
+}
+
+async function loadHooks() {
+  if (!hooksPath) return
+  try {
+    const userHooks = await import(hooksPath)
+    hooks = { ...hooks, ...userHooks.default || userHooks }
+    console.log(`  Hooks:    loaded from ${hooksPath}`)
+  } catch (err) {
+    console.log(`  Hooks:    failed to load (${err.message})`)
+  }
+}
 
 // ─── State (append-only arrays, no mutation) ─────────────────
 
@@ -149,21 +210,36 @@ async function captureLoop() {
 
   broadcast({ type: 'transcript', speaker: 'Meet', text: caption })
 
-  // Analyze
-  await analyzeChunk(chunk)
+  // Hook: onTranscript
+  if (hooks.onTranscript) {
+    try { await hooks.onTranscript(chunk) } catch {}
+  }
+
+  // Analysis runs on its own interval, not blocking caption capture
 }
 
-// ─── Claude Analysis ─────────────────────────────────────────
+// Analysis loop — runs independently from capture, async
+let analysisRunning = false
+async function analysisLoop() {
+  if (analysisRunning || chunks.length === 0) return
+  analysisRunning = true
+  try {
+    const latestChunks = chunks.slice(-5)
+    const merged = { text: latestChunks.map(c => c.text).join(' '), ts: Date.now() }
+    await analyzeChunk(merged)
+  } catch {}
+  analysisRunning = false
+}
 
-async function analyzeChunk(chunk) {
-  const history = chunks.slice(-10).map(c => c.text).join('\n')
+// ─── LLM Analysis (multi-provider) ──────────────────────────
 
-  const prompt = `You are a real-time sales co-pilot. Analyze this latest conversation chunk.
+function buildPrompt(chunk, history) {
+  return `You are a real-time sales co-pilot. Analyze this latest conversation chunk.
 
 Prospect: ${prospect}
 Context: ${context}
 ${brief ? 'Brief: ' + brief : ''}
-
+${userContext ? '\n--- YOUR PLAYBOOK ---\n' + userContext + '\n--- END PLAYBOOK ---\n' : ''}
 Latest chunk (15s):
 ${chunk.text}
 
@@ -172,19 +248,116 @@ ${history}
 
 Respond in strict JSON (no markdown, no backticks):
 {"keywords":["word1","word2"],"sentiment":"hot|warm|cool|cold","insight":"key observation","suggestion":"what the seller should do NOW","objection_detected":"or null","objection_response":"or null","budget_signal":"or null","closing_opportunity":false,"closing_script":"or null","danger":"or null"}`
+}
+
+async function callLLM(prompt) {
+  switch (provider) {
+    case 'claude': return callClaude(prompt)
+    case 'anthropic': return callAnthropicAPI(prompt)
+    case 'openai': return callOpenAI(prompt)
+    case 'ollama': return callOllama(prompt)
+    case 'custom': return callCustom(prompt)
+    default: return callClaude(prompt)
+  }
+}
+
+function callClaude(prompt) {
+  const result = execFileSync('claude', ['-p', prompt, '--output-format', 'text'], {
+    timeout: 20000,
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, CLAUDE_CODE_DISABLE_NONESSENTIAL: '1' },
+  })
+  return result.trim()
+}
+
+async function callAnthropicAPI(prompt) {
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) throw new Error('ANTHROPIC_API_KEY not set')
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: model || 'claude-sonnet-4-20250514',
+      max_tokens: 500,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  })
+  const data = await res.json()
+  return data.content?.[0]?.text || ''
+}
+
+async function callOpenAI(prompt) {
+  const key = process.env.OPENAI_API_KEY
+  if (!key) throw new Error('OPENAI_API_KEY not set')
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({
+      model: model || 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 500,
+      temperature: 0.3,
+    }),
+  })
+  const data = await res.json()
+  return data.choices?.[0]?.message?.content || ''
+}
+
+async function callOllama(prompt) {
+  const url = process.env.OLLAMA_URL || 'http://127.0.0.1:11434'
+  const res = await fetch(`${url}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: model || 'llama3',
+      prompt,
+      stream: false,
+    }),
+  })
+  const data = await res.json()
+  return data.response || ''
+}
+
+async function callCustom(prompt) {
+  const url = process.env.CUSTOM_API_URL
+  const key = process.env.CUSTOM_API_KEY || ''
+  if (!url) throw new Error('CUSTOM_API_URL not set')
+  const headers = { 'Content-Type': 'application/json' }
+  if (key) headers['Authorization'] = `Bearer ${key}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: model || 'default',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 500,
+    }),
+  })
+  const data = await res.json()
+  return data.choices?.[0]?.message?.content || data.content?.[0]?.text || ''
+}
+
+async function analyzeChunk(chunk) {
+  const history = chunks.slice(-10).map(c => c.text).join('\n')
+
+  // Hook: beforeAnalysis — enrich context (RAG, graph query, CRM lookup, etc.)
+  let extraContext = ''
+  if (hooks.beforeAnalysis) {
+    try { extraContext = await hooks.beforeAnalysis(chunk, history, userContext) || '' } catch {}
+  }
+
+  const prompt = buildPrompt(chunk, history) + (extraContext ? '\n\nAdditional context from your pipeline:\n' + extraContext : '')
 
   try {
-    const result = execFileSync('claude', ['-p', prompt, '--output-format', 'text'], {
-      timeout: 20000,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, CLAUDE_CODE_DISABLE_NONESSENTIAL: '1' },
-    })
-
-    const cleaned = result.trim().replace(/^```json\s*/, '').replace(/```\s*$/, '')
+    const raw = await callLLM(prompt)
+    const cleaned = raw.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim()
     const parsed = JSON.parse(cleaned)
 
-    // Broadcast each insight type
     if (parsed.sentiment) {
       currentSentiment = parsed.sentiment
       broadcast({ type: 'sentiment', level: parsed.sentiment })
@@ -215,17 +388,21 @@ Respond in strict JSON (no markdown, no backticks):
     }
 
     if (parsed.closing_opportunity) {
-      broadcast({ type: 'closing', text: parsed.closing_script || 'Opportunité de closing détectée' })
+      broadcast({ type: 'closing', text: parsed.closing_script || 'Closing opportunity detected' })
     }
 
     if (parsed.danger && parsed.danger !== 'null') {
       broadcast({ type: 'danger', text: parsed.danger })
     }
 
-    insights = [...insights, { ...parsed, ts: Date.now() }]
+    // Hook: afterAnalysis — enrich or transform insights
+    const finalInsights = hooks.afterAnalysis
+      ? await hooks.afterAnalysis(parsed, chunk, history).catch(() => parsed)
+      : parsed
+
+    insights = [...insights, { ...finalInsights, ts: Date.now() }]
   } catch (err) {
-    // Silent fail — don't interrupt the call
-    broadcast({ type: 'system', text: 'Analyse en cours...' })
+    broadcast({ type: 'system', text: `Analysis pending (${provider})...` })
   }
 }
 
@@ -282,21 +459,31 @@ function demoLoop() {
 
 // ─── Main ────────────────────────────────────────────────────
 
-console.log(`\n  Metatron Call Prompter`)
-console.log(`  ─────────────────────`)
+console.log(`\n  Call Prompter`)
+console.log(`  ─────────────`)
 console.log(`  WebSocket: ws://127.0.0.1:${WS_PORT}`)
-console.log(`  UI:        file://${join(__dirname, 'ui.html')}?port=${WS_PORT}`)
+console.log(`  UI:        file://${join(__dirname, 'ui.html')}`)
+console.log(`  Provider:  ${provider}${model ? ' (' + model + ')' : ''}`)
 console.log(`  Prospect:  ${prospect}`)
 console.log(`  Context:   ${context}`)
+console.log(`  Playbook:  ${userContext ? contextFilePath || 'context.md' : 'none'}`)
+console.log(`  Hooks:     ${hooksPath || 'none'}`)
 console.log(`  Mode:      ${isDemo ? 'DEMO' : 'LIVE (CDP port ' + CDP_PORT + ')'}`)
-console.log(`  Interval:  ${CAPTURE_INTERVAL_MS / 1000}s`)
-console.log(`\n  Raccourcis UI: +/- taille, Espace pause, C clear, F fullscreen`)
-console.log(`  Double-clic dans l'UI pour le mode démo\n`)
+console.log(`  Capture:   every ${CAPTURE_INTERVAL_MS / 1000}s (captions → instant)`)
+console.log(`  Analysis:  every ${ANALYSIS_INTERVAL_MS / 1000}s (LLM → insights)`)
+console.log(`\n  UI shortcuts: +/- font size, Space pause, C clear, F fullscreen`)
+console.log(`  Double-click in UI to toggle demo mode\n`)
+
+await loadHooks()
 
 if (isDemo) {
   demoLoop()
 } else {
+  // Fast caption capture (every 3s) — transcript appears instantly
   setInterval(captureLoop, CAPTURE_INTERVAL_MS)
-  // First capture after 3s
-  setTimeout(captureLoop, 3000)
+  setTimeout(captureLoop, 2000)
+
+  // Slower LLM analysis (every 15s) — insights appear with slight delay
+  setInterval(analysisLoop, ANALYSIS_INTERVAL_MS)
+  setTimeout(analysisLoop, 5000)
 }
