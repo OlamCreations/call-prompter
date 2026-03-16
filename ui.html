@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root {
+:root, [data-theme="dark"] {
   --bg: #0D0B0A;
   --surface: #1B1613;
   --surface-el: #241E1A;
@@ -30,10 +30,37 @@
   --orange-bg: rgba(212,144,74,0.07);
   --glass: rgba(255,255,255,0.03);
   --glass-border: rgba(255,255,255,0.06);
+  --noise-opacity: 0.03;
   --radius: 16px;
   --radius-sm: 12px;
   --font-serif: 'Fraunces', 'Times New Roman', serif;
   --font-sans: 'Space Grotesk', 'Segoe UI', sans-serif;
+}
+[data-theme="light"] {
+  --bg: #F4EFE7;
+  --surface: #FBF7F1;
+  --surface-el: #FFFFFF;
+  --text: #1A1715;
+  --text-sec: #362F2B;
+  --text-muted: #5C5652;
+  --text-subtle: #8C8380;
+  --forest: #3D5A47;
+  --forest-deep: #2E4A39;
+  --forest-bg: rgba(61,90,71,0.07);
+  --teal: #1A7A6D;
+  --teal-muted: #2B7A6F;
+  --teal-bg: rgba(43,122,111,0.06);
+  --amber: #9E6B24;
+  --amber-deep: #7A5218;
+  --amber-bg: rgba(158,107,36,0.08);
+  --danger-color: #C04040;
+  --danger-deep: #8A2020;
+  --danger-bg: rgba(192,64,64,0.06);
+  --orange: #B07030;
+  --orange-bg: rgba(176,112,48,0.06);
+  --glass: rgba(0,0,0,0.02);
+  --glass-border: rgba(0,0,0,0.08);
+  --noise-opacity: 0.02;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -52,7 +79,7 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  opacity: 0.03;
+  opacity: var(--noise-opacity);
   pointer-events: none;
   z-index: 999;
   background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -428,6 +455,8 @@ body.sidebar-hidden #sidebar-toggle { right: 0; }
       <button id="btn-bigger">+</button>
       <span id="font-size-display">18px</span>
     </div>
+    <button id="btn-demo">DEMO</button>
+    <button id="btn-theme">LIGHT</button>
     <button id="btn-pause">PAUSE</button>
     <button id="btn-clear">CLEAR</button>
   </div>
@@ -600,11 +629,28 @@ document.getElementById('btn-pause').onclick = () => {
 }
 document.getElementById('btn-clear').onclick = () => { feed.innerHTML = '' }
 
+// Theme toggle
+let currentTheme = localStorage.getItem('cp-theme') || 'dark'
+document.documentElement.setAttribute('data-theme', currentTheme)
+document.getElementById('btn-theme').textContent = currentTheme === 'dark' ? 'LIGHT' : 'DARK'
+
+document.getElementById('btn-theme').onclick = () => {
+  currentTheme = currentTheme === 'dark' ? 'light' : 'dark'
+  document.documentElement.setAttribute('data-theme', currentTheme)
+  document.getElementById('btn-theme').textContent = currentTheme === 'dark' ? 'LIGHT' : 'DARK'
+  localStorage.setItem('cp-theme', currentTheme)
+}
+
+// Demo button
+document.getElementById('btn-demo').onclick = () => toggleDemo()
+
 document.addEventListener('keydown', (e) => {
   if (e.key === '+' || e.key === '=') setFontSize(fontSize + 2)
   if (e.key === '-') setFontSize(fontSize - 2)
   if (e.key === ' ') { e.preventDefault(); document.getElementById('btn-pause').click() }
   if (e.key === 'c' && !e.ctrlKey) feed.innerHTML = ''
+  if (e.key === 'd') toggleDemo()
+  if (e.key === 't') document.getElementById('btn-theme').click()
   if (e.key === 'f') document.documentElement.requestFullscreen?.()
   if (e.key === 'Escape') document.exitFullscreen?.()
 })
@@ -642,20 +688,23 @@ const demos = [
   { type: 'sentiment', level: 'hot' },
 ]
 
-document.addEventListener('dblclick', (e) => {
-  if (e.target.closest('#bar')) return
+let demoIdx = 0
+function toggleDemo() {
   demoMode = !demoMode
+  const btn = document.getElementById('btn-demo')
   if (demoMode) {
-    let i = 0
+    demoIdx = 0
     startTime = Date.now()
     statusEl.textContent = 'DEMO'
     statusEl.style.color = 'var(--amber)'
     clearInterval(timerInterval)
     timerInterval = setInterval(updateTimer, 1000)
     addLine('Demo mode — simulated sales call', 'system')
+    btn.textContent = 'STOP DEMO'
+    btn.classList.add('active')
     demoInterval = setInterval(() => {
-      if (i >= demos.length) i = 0
-      handleMessage(JSON.stringify(demos[i++]))
+      if (demoIdx >= demos.length) demoIdx = 0
+      handleMessage(JSON.stringify(demos[demoIdx++]))
     }, 2500)
   } else {
     clearInterval(demoInterval)
@@ -664,7 +713,14 @@ document.addEventListener('dblclick', (e) => {
     statusEl.textContent = 'DISCONNECTED'
     statusEl.style.color = 'var(--text-subtle)'
     addLine('Demo mode stopped', 'system')
+    btn.textContent = 'DEMO'
+    btn.classList.remove('active')
   }
+}
+
+document.addEventListener('dblclick', (e) => {
+  if (e.target.closest('#bar')) return
+  toggleDemo()
 })
 </script>
 </body>
