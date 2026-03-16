@@ -16,6 +16,7 @@ import { existsSync } from 'node:fs'
 
 const CDP_PORT = 9222
 const FLAG = `--remote-debugging-port=${CDP_PORT}`
+const USER_DATA_FLAG = `--user-data-dir=${process.env.LOCALAPPDATA || process.env.HOME}${isWin ? '\\\\Google\\\\Chrome\\\\User Data' : '/Google/Chrome/User Data'}`
 const isUndo = process.argv.includes('--undo')
 
 const isWin = process.platform === 'win32'
@@ -52,8 +53,8 @@ function setupWindows() {
     found = true
     try {
       const ps = isUndo
-        ? `$s = (New-Object -COM WScript.Shell).CreateShortcut('${p}'); $s.Arguments = $s.Arguments -replace '${FLAG}',''; $s.Arguments = $s.Arguments.Trim(); $s.Save()`
-        : `$s = (New-Object -COM WScript.Shell).CreateShortcut('${p}'); if($s.Arguments -notmatch 'remote-debugging-port'){$s.Arguments += ' ${FLAG}'}; $s.Save()`
+        ? `$s = (New-Object -COM WScript.Shell).CreateShortcut('${p}'); $s.Arguments = $s.Arguments -replace '${FLAG}',''; $s.Arguments = $s.Arguments -replace '--user-data-dir=[^ ]*',''; $s.Arguments = $s.Arguments.Trim(); $s.Save()`
+        : `$s = (New-Object -COM WScript.Shell).CreateShortcut('${p}'); if($s.Arguments -notmatch 'remote-debugging-port'){$s.Arguments += ' ${FLAG} --user-data-dir="$env:LOCALAPPDATA\\Google\\Chrome\\User Data"'}; $s.Save()`
       execSync(`powershell -Command "${ps}"`, { stdio: 'pipe' })
       log(`${isUndo ? 'Removed' : 'Added'} CDP flag: ${p.split('\\').pop()}`)
     } catch (err) {
