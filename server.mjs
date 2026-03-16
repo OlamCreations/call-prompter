@@ -42,7 +42,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const WS_PORT = Number(process.env.PROMPTER_PORT) || 4242
 const CDP_PORT = Number(process.env.CDP_PORT) || 9222
 const CAPTURE_INTERVAL_MS = Number(process.env.CAPTURE_INTERVAL) || 3000
-const ANALYSIS_INTERVAL_MS = Number(process.env.ANALYSIS_INTERVAL) || 15000
+const ANALYSIS_INTERVAL_MS = Number(process.env.ANALYSIS_INTERVAL) || 8000
 const MAX_HISTORY_CHUNKS = 60
 
 // ─── Args ────────────────────────────────────────────────────

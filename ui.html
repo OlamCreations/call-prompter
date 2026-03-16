@@ -1,373 +1,408 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Metatron Call Prompter</title>
+<title>Call Prompter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+:root {
+  --bg: #0D0B0A;
+  --surface: #1B1613;
+  --surface-el: #241E1A;
+  --text: #F9F5EF;
+  --text-sec: #B7ACA3;
+  --text-muted: #706862;
+  --text-subtle: #4A4440;
+  --forest: #5A8A6F;
+  --forest-deep: #4A7A5F;
+  --forest-bg: rgba(90,138,111,0.08);
+  --teal: #2DD4BF;
+  --teal-muted: #0D9488;
+  --teal-bg: rgba(13,148,136,0.08);
+  --amber: #D8A15A;
+  --amber-deep: #9E6B24;
+  --amber-bg: rgba(216,161,90,0.10);
+  --danger-color: #E06060;
+  --danger-deep: #993333;
+  --danger-bg: rgba(224,96,96,0.08);
+  --orange: #D4904A;
+  --orange-bg: rgba(212,144,74,0.07);
+  --glass: rgba(255,255,255,0.03);
+  --glass-border: rgba(255,255,255,0.06);
+  --radius: 16px;
+  --radius-sm: 12px;
+  --font-serif: 'Fraunces', 'Times New Roman', serif;
+  --font-sans: 'Space Grotesk', 'Segoe UI', sans-serif;
+}
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-  background: #0a0a0a;
-  color: #e0e0e0;
-  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
   height: 100vh;
   overflow: hidden;
   cursor: default;
   display: flex;
   flex-direction: column;
 }
-#main {
-  display: flex;
-  flex: 1;
-  min-height: 0;
+
+/* ─── Noise texture overlay ─────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 999;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
+
+#main { display: flex; flex: 1; min-height: 0; }
+
+/* ─── Feed ──────────────────────────────────────────────────── */
 #feed {
-  padding: 24px;
+  padding: 28px 32px;
   flex: 1;
   overflow-y: auto;
   scroll-behavior: smooth;
 }
+#feed::-webkit-scrollbar { width: 5px; }
+#feed::-webkit-scrollbar-track { background: transparent; }
+#feed::-webkit-scrollbar-thumb { background: rgba(43,122,111,0.2); border-radius: 3px; }
+#feed::-webkit-scrollbar-thumb:hover { background: rgba(43,122,111,0.4); }
+
+/* ─── Lines ─────────────────────────────────────────────────── */
+.line { margin-bottom: 14px; line-height: 1.65; opacity: 0; animation: fadein 0.4s ease-out forwards; }
+@keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.line .ts { color: var(--text-subtle); font-size: 0.55em; margin-right: 12px; font-variant-numeric: tabular-nums; letter-spacing: 0.5px; }
+
+/* ── PROSPECT: forest glass card ────────────────────────────── */
+.line.transcript-prospect {
+  backdrop-filter: blur(12px) saturate(1.2);
+  background: var(--forest-bg);
+  border: 1px solid rgba(90,138,111,0.15);
+  border-left: 3px solid var(--forest);
+  padding: 14px 20px;
+  margin: 8px 0;
+  border-radius: 4px var(--radius-sm) var(--radius-sm) 4px;
+  color: var(--text);
+}
+.line.transcript-prospect .speaker {
+  font-family: var(--font-serif);
+  color: var(--forest);
+  font-weight: 400;
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* ── YOU: subtle, muted ─────────────────────────────────────── */
+.line.transcript-jonas {
+  padding: 6px 20px 6px 28px;
+  margin: 3px 0;
+  color: var(--text-sec);
+  font-size: 0.88em;
+}
+.line.transcript-jonas .speaker {
+  color: var(--text-muted);
+  font-family: var(--font-serif);
+  font-weight: 300;
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  display: inline;
+  margin-right: 10px;
+}
+
+/* ── INSIGHT ────────────────────────────────────────────────── */
+.line.insight {
+  color: var(--text-sec);
+  padding: 3px 20px 3px 28px;
+  font-size: 0.85em;
+  font-style: italic;
+}
+
+/* ── SAY: teal glass card ───────────────────────────────────── */
+.line.suggestion {
+  backdrop-filter: blur(12px) saturate(1.2);
+  background: var(--teal-bg);
+  border: 1px solid rgba(13,148,136,0.15);
+  border-left: 3px solid var(--teal-muted);
+  padding: 12px 20px;
+  margin: 10px 0;
+  border-radius: 4px var(--radius-sm) var(--radius-sm) 4px;
+  color: var(--teal);
+}
+.line.suggestion .label {
+  font-family: var(--font-serif);
+  display: block;
+  font-size: 0.6em;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: var(--teal-muted);
+  margin-bottom: 5px;
+}
+
+/* ── CLOSE: amber glass card, large ─────────────────────────── */
+.line.closing {
+  backdrop-filter: blur(16px) saturate(1.4);
+  background: var(--amber-bg);
+  border: 1px solid rgba(216,161,90,0.2);
+  border-left: 4px solid var(--amber);
+  padding: 16px 22px;
+  margin: 14px 0;
+  border-radius: 4px var(--radius) var(--radius) 4px;
+  color: var(--amber);
+  font-weight: 500;
+  font-size: 1.08em;
+  box-shadow: 0 4px 24px rgba(216,161,90,0.06);
+}
+.line.closing .label {
+  font-family: var(--font-serif);
+  display: block;
+  font-size: 0.55em;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  color: var(--amber-deep);
+  margin-bottom: 6px;
+}
+
+/* ── DANGER: red glass card, large ──────────────────────────── */
+.line.danger {
+  backdrop-filter: blur(16px) saturate(1.4);
+  background: var(--danger-bg);
+  border: 1px solid rgba(224,96,96,0.2);
+  border-left: 4px solid var(--danger-color);
+  padding: 16px 22px;
+  margin: 14px 0;
+  border-radius: 4px var(--radius) var(--radius) 4px;
+  color: var(--danger-color);
+  font-weight: 500;
+  font-size: 1.08em;
+  box-shadow: 0 4px 24px rgba(224,96,96,0.06);
+}
+.line.danger .label {
+  font-family: var(--font-serif);
+  display: block;
+  font-size: 0.55em;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  color: var(--danger-deep);
+  margin-bottom: 6px;
+}
+
+/* ── OBJECTION: orange glass card ───────────────────────────── */
+.line.objection {
+  backdrop-filter: blur(12px) saturate(1.2);
+  background: var(--orange-bg);
+  border: 1px solid rgba(212,144,74,0.15);
+  border-left: 3px solid var(--orange);
+  padding: 12px 20px;
+  margin: 10px 0;
+  border-radius: 4px var(--radius-sm) var(--radius-sm) 4px;
+  color: var(--orange);
+}
+.line.objection .label {
+  font-family: var(--font-serif);
+  display: block;
+  font-size: 0.6em;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: rgba(212,144,74,0.5);
+  margin-bottom: 5px;
+}
+
+/* ── BUDGET: amber accent ───────────────────────────────────── */
+.line.budget {
+  backdrop-filter: blur(12px) saturate(1.2);
+  background: rgba(158,107,36,0.06);
+  border: 1px solid rgba(158,107,36,0.12);
+  border-left: 3px solid var(--amber-deep);
+  padding: 12px 20px;
+  margin: 10px 0;
+  border-radius: 4px var(--radius-sm) var(--radius-sm) 4px;
+  color: var(--amber);
+  font-weight: 500;
+}
+.line.budget .label {
+  font-family: var(--font-serif);
+  display: block;
+  font-size: 0.6em;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: var(--amber-deep);
+  margin-bottom: 5px;
+}
+
+/* ── KEYWORD / SENTIMENT / SYSTEM ───────────────────────────── */
+.line.keyword { color: var(--teal-muted); font-size: 0.72em; padding: 2px 28px; opacity: 0.6; letter-spacing: 0.3px; }
+.line.sentiment { color: var(--text-subtle); text-transform: uppercase; letter-spacing: 4px; font-size: 0.6em; padding: 1px 28px; }
+.line.system { color: var(--text-subtle); font-style: italic; font-size: 0.72em; padding: 2px 28px; opacity: 0.5; }
+
+/* ─── Sidebar ───────────────────────────────────────────────── */
 #sidebar {
   width: 320px;
-  background: #0f0f0f;
-  border-left: 1px solid #1a1a1a;
-  padding: 16px;
+  background: var(--surface);
+  border-left: 1px solid var(--glass-border);
+  padding: 20px;
   overflow-y: auto;
   font-size: 13px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 #sidebar::-webkit-scrollbar { width: 4px; }
-#sidebar::-webkit-scrollbar-thumb { background: #222; }
-#sidebar .section { }
+#sidebar::-webkit-scrollbar-thumb { background: rgba(43,122,111,0.15); border-radius: 2px; }
 #sidebar .section-title {
-  color: #555;
+  font-family: var(--font-serif);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 2px;
-  font-size: 10px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid #1a1a1a;
-  padding-bottom: 4px;
+  letter-spacing: 3px;
+  font-size: 9px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--glass-border);
 }
 #sidebar .bullet {
-  color: #999;
-  margin-bottom: 6px;
+  color: var(--text-sec);
+  margin-bottom: 8px;
   line-height: 1.5;
-  padding-left: 12px;
-  text-indent: -8px;
+  padding-left: 14px;
+  text-indent: -10px;
+  font-size: 12px;
 }
-#sidebar .bullet::before { content: '· '; color: #555; }
-#sidebar .bullet.hot { color: #f0c674; }
-#sidebar .bullet.hot::before { color: #f0c674; }
-#sidebar .bullet.danger { color: #cc6666; }
-#sidebar .bullet.danger::before { color: #cc6666; content: '! '; }
-#sidebar .number { color: #b294bb; font-weight: bold; font-size: 18px; }
-#sidebar .number-label { color: #666; font-size: 11px; }
-#sidebar .number-row {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
+#sidebar .bullet::before { content: '· '; color: var(--text-subtle); }
+#sidebar .bullet.hot { color: var(--amber); }
+#sidebar .bullet.hot::before { color: var(--amber); }
+#sidebar .bullet.danger { color: var(--danger-color); }
+#sidebar .bullet.danger::before { color: var(--danger-color); content: '! '; }
+#sidebar .number { font-family: var(--font-serif); color: var(--amber); font-weight: 400; font-size: 20px; font-style: italic; }
+#sidebar .number-label { color: var(--text-muted); font-size: 10px; }
+#sidebar .number-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+
 #sidebar-toggle {
   position: absolute;
   right: 320px;
   top: 50%;
   transform: translateY(-50%);
-  background: #1a1a1a;
-  border: 1px solid #333;
-  color: #555;
-  padding: 8px 4px;
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  padding: 12px 5px;
   cursor: pointer;
   font-size: 10px;
   z-index: 10;
   border-right: none;
-  border-radius: 3px 0 0 3px;
-  transition: right 0.2s;
+  border-radius: 6px 0 0 6px;
+  transition: all 0.2s;
 }
-#sidebar-toggle:hover { color: #aaa; }
+#sidebar-toggle:hover { color: var(--teal); }
 body.sidebar-hidden #sidebar { display: none; }
 body.sidebar-hidden #sidebar-toggle { right: 0; }
 
-/* ── Responsive ───────────────────────────────────────────── */
+/* ─── Bar ───────────────────────────────────────────────────── */
+#bar {
+  height: 52px;
+  background: var(--surface);
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+  user-select: none;
+}
+#bar .left { display: flex; gap: 28px; align-items: center; }
+#bar .right { display: flex; gap: 14px; align-items: center; }
+#bar .sentiment-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; margin-right: 6px;
+}
+.dot-hot { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+.dot-warm { background: var(--forest); box-shadow: 0 0 8px var(--forest); }
+.dot-cool { background: var(--teal-muted); }
+.dot-cold { background: var(--danger-color); box-shadow: 0 0 8px var(--danger-color); }
+
+#bar button {
+  backdrop-filter: blur(8px);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  color: var(--text-sec);
+  padding: 5px 16px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  border-radius: 10px;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+#bar button:hover { border-color: rgba(13,148,136,0.3); color: var(--teal); background: rgba(13,148,136,0.05); }
+#bar button:active { background: rgba(13,148,136,0.1); }
+#bar button.active { border-color: var(--teal-muted); color: var(--teal); }
+
+#bar .size-controls { display: flex; align-items: center; gap: 8px; }
+#bar .size-controls button { width: 30px; padding: 5px 0; text-align: center; font-weight: 600; }
+#bar .size-controls .size-slider {
+  -webkit-appearance: none; appearance: none;
+  width: 90px; height: 3px;
+  background: var(--glass-border);
+  border-radius: 2px;
+  outline: none; cursor: pointer;
+}
+#bar .size-controls .size-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 12px;
+  background: var(--teal-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+#bar .size-controls .size-slider::-webkit-slider-thumb:hover { background: var(--teal); }
+#bar #status { font-family: var(--font-serif); font-weight: 400; letter-spacing: 2px; font-size: 11px; }
+#bar #font-size-display { color: var(--text-subtle); min-width: 32px; text-align: center; font-size: 10px; }
+
+/* ─── Responsive ────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  #sidebar { width: 260px; padding: 12px; font-size: 12px; }
+  #sidebar { width: 260px; padding: 14px; }
   #sidebar-toggle { right: 260px; }
   body.sidebar-hidden #sidebar-toggle { right: 0; }
-  #sidebar .number { font-size: 15px; }
 }
 @media (max-width: 700px) {
   #main { flex-direction: column; }
   #sidebar {
-    width: 100%;
-    max-height: 35vh;
-    border-left: none;
-    border-top: 1px solid #1a1a1a;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 10px;
+    width: 100%; max-height: 35vh; border-left: none;
+    border-top: 1px solid var(--glass-border);
+    flex-direction: row; flex-wrap: wrap; gap: 8px; padding: 12px;
   }
   #sidebar .section { flex: 1 1 45%; min-width: 140px; }
   #feed { height: auto; flex: 1; min-height: 0; }
   #sidebar-toggle { display: none; }
-  #bar { flex-wrap: wrap; height: auto; padding: 8px 16px; gap: 8px; }
+  #bar { flex-wrap: wrap; height: auto; padding: 10px 20px; gap: 8px; }
   #bar .size-controls .size-slider { width: 60px; }
 }
 @media (max-width: 480px) {
-  #feed { padding: 12px; }
+  #feed { padding: 14px; }
   #sidebar .section { flex: 1 1 100%; }
   #sidebar { max-height: 40vh; }
-  #bar .left { gap: 12px; }
-  #bar .right { gap: 8px; }
-  #bar button { padding: 3px 8px; font-size: 11px; }
+  #bar button { padding: 3px 10px; font-size: 10px; }
 }
-#feed::-webkit-scrollbar { width: 6px; }
-#feed::-webkit-scrollbar-track { background: #111; }
-#feed::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-#feed::-webkit-scrollbar-thumb:hover { background: #555; }
-
-.line { margin-bottom: 12px; line-height: 1.6; opacity: 0; animation: fadein 0.3s forwards; }
-@keyframes fadein { to { opacity: 1; } }
-
-.line .ts { color: #383838; font-size: 0.6em; margin-right: 10px; font-variant-numeric: tabular-nums; }
-
-/* ── PROSPECT: green accent ────────────────────────────────── */
-.line.transcript-prospect {
-  border-left: 4px solid #5a9a5a;
-  padding: 10px 16px;
-  margin: 6px 0;
-  background: rgba(90, 154, 90, 0.06);
-  border-radius: 0 6px 6px 0;
-  color: #b0d4a0;
-}
-.line.transcript-prospect .speaker {
-  color: #6abf6a;
-  font-weight: bold;
-  font-size: 0.75em;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  display: block;
-  margin-bottom: 3px;
-}
-
-/* ── JONAS: white, clean ───────────────────────────────────── */
-.line.transcript-jonas {
-  padding: 6px 16px 6px 24px;
-  margin: 2px 0;
-  color: #ccc;
-  font-size: 0.9em;
-}
-.line.transcript-jonas .speaker {
-  color: #fff;
-  font-weight: bold;
-  font-size: 0.75em;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  display: inline;
-  margin-right: 8px;
-}
-
-/* ── INSIGHT: small italic context ─────────────────────────── */
-.line.insight {
-  color: #888;
-  padding: 2px 16px 2px 24px;
-  font-size: 0.85em;
-  font-style: italic;
-}
-
-/* ── SUGGESTION: green card — what to DO ───────────────────── */
-.line.suggestion {
-  border-left: 4px solid #8fae53;
-  padding: 10px 16px;
-  margin: 10px 0;
-  background: rgba(143, 174, 83, 0.08);
-  border-radius: 0 6px 6px 0;
-  color: #b5cc7a;
-}
-.line.suggestion .label {
-  display: block;
-  font-size: 0.65em;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  color: #6a8a3a;
-  margin-bottom: 4px;
-}
-
-/* ── CLOSING: gold card — BIGGEST, can't miss ──────────────── */
-.line.closing {
-  border-left: 5px solid #e8b828;
-  padding: 14px 18px;
-  margin: 14px 0;
-  background: rgba(232, 184, 40, 0.10);
-  border-radius: 0 8px 8px 0;
-  color: #f0d060;
-  font-weight: bold;
-  font-size: 1.1em;
-}
-.line.closing .label {
-  display: block;
-  font-size: 0.6em;
-  text-transform: uppercase;
-  letter-spacing: 3px;
-  color: #a08020;
-  margin-bottom: 5px;
-}
-
-/* ── DANGER: red card — attention NOW ──────────────────────── */
-.line.danger {
-  border-left: 5px solid #d44;
-  padding: 14px 18px;
-  margin: 14px 0;
-  background: rgba(221, 68, 68, 0.10);
-  border-radius: 0 8px 8px 0;
-  color: #e87070;
-  font-weight: bold;
-  font-size: 1.1em;
-}
-.line.danger .label {
-  display: block;
-  font-size: 0.6em;
-  text-transform: uppercase;
-  letter-spacing: 3px;
-  color: #993333;
-  margin-bottom: 5px;
-}
-
-/* ── OBJECTION: orange card ────────────────────────────────── */
-.line.objection {
-  border-left: 4px solid #d48a3a;
-  padding: 10px 16px;
-  margin: 10px 0;
-  background: rgba(212, 138, 58, 0.07);
-  border-radius: 0 6px 6px 0;
-  color: #dda050;
-}
-.line.objection .label {
-  display: block;
-  font-size: 0.65em;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  color: #8a5a20;
-  margin-bottom: 4px;
-}
-
-/* ── BUDGET: purple card ───────────────────────────────────── */
-.line.budget {
-  border-left: 4px solid #9a6abf;
-  padding: 10px 16px;
-  margin: 10px 0;
-  background: rgba(154, 106, 191, 0.07);
-  border-radius: 0 6px 6px 0;
-  color: #c090e0;
-  font-weight: bold;
-}
-.line.budget .label {
-  display: block;
-  font-size: 0.65em;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  color: #6a4a8a;
-  margin-bottom: 4px;
-}
-
-/* ── KEYWORD: subtle tags ──────────────────────────────────── */
-.line.keyword {
-  color: #5a8a7a;
-  font-size: 0.75em;
-  padding: 2px 24px;
-  opacity: 0.7;
-}
-
-/* ── SENTIMENT: tiny indicator ─────────────────────────────── */
-.line.sentiment { color: #444; text-transform: uppercase; letter-spacing: 3px; font-size: 0.65em; padding: 1px 24px; }
-
-/* ── SYSTEM: ghost text ────────────────────────────────────── */
-.line.system { color: #2a2a2a; font-style: italic; font-size: 0.75em; padding: 2px 24px; }
-
-#bar {
-  height: 48px;
-  background: #111;
-  border-top: 1px solid #222;
-  display: flex;
-  align-items: center;
-  padding: 0 24px;
-  justify-content: space-between;
-  font-size: 13px;
-  color: #555;
-  user-select: none;
-}
-#bar .left { display: flex; gap: 24px; align-items: center; }
-#bar .right { display: flex; gap: 12px; align-items: center; }
-#bar .sentiment-dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  display: inline-block; margin-right: 6px;
-}
-.dot-hot { background: #f0c674; box-shadow: 0 0 6px #f0c674; }
-.dot-warm { background: #b5bd68; box-shadow: 0 0 6px #b5bd68; }
-.dot-cool { background: #6a9fb5; }
-.dot-cold { background: #cc6666; box-shadow: 0 0 6px #cc6666; }
-
-#bar button {
-  background: #1a1a1a;
-  border: 1px solid #333;
-  color: #888;
-  padding: 4px 14px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  border-radius: 3px;
-  transition: all 0.15s;
-}
-#bar button:hover { border-color: #666; color: #ccc; background: #222; }
-#bar button:active { background: #333; }
-#bar button.active { border-color: #b5bd68; color: #b5bd68; }
-
-#bar .size-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-#bar .size-controls button {
-  width: 32px;
-  text-align: center;
-  font-weight: bold;
-}
-#bar .size-controls .size-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100px;
-  height: 4px;
-  background: #333;
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-}
-#bar .size-controls .size-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  background: #888;
-  border-radius: 50%;
-  cursor: pointer;
-}
-#bar .size-controls .size-slider::-webkit-slider-thumb:hover { background: #aaa; }
-
-#bar #status { font-weight: bold; letter-spacing: 1px; }
-#bar #font-size-display { color: #666; min-width: 28px; text-align: center; }
 </style>
 </head>
 <body>
 <div id="main">
   <div id="feed"></div>
-  <button id="sidebar-toggle">◂</button>
+  <button id="sidebar-toggle">&#9666;</button>
   <div id="sidebar">
     <div class="section" id="sec-numbers">
-      <div class="section-title">Chiffres clés</div>
+      <div class="section-title">Key Numbers</div>
       <div id="numbers-list"></div>
     </div>
     <div class="section" id="sec-points">
-      <div class="section-title">Points clés</div>
+      <div class="section-title">Key Points</div>
       <div id="points-list"></div>
     </div>
     <div class="section" id="sec-objections">
@@ -375,7 +410,7 @@ body.sidebar-hidden #sidebar-toggle { right: 0; }
       <div id="objections-list"></div>
     </div>
     <div class="section" id="sec-actions">
-      <div class="section-title">Next steps</div>
+      <div class="section-title">Next Steps</div>
       <div id="actions-list"></div>
     </div>
   </div>
@@ -424,7 +459,7 @@ function addLine(text, type = 'insight') {
   if (paused) return
   const div = document.createElement('div')
   div.className = 'line ' + type
-  const ts = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
   div.innerHTML = '<span class="ts">' + ts + '</span>' + text
   feed.appendChild(div)
   feed.scrollTop = feed.scrollHeight
@@ -445,37 +480,26 @@ function updateTimer() {
 
 function connect() {
   const port = new URLSearchParams(window.location.search).get('port') || '4242'
-  try {
-    ws = new WebSocket('ws://127.0.0.1:' + port)
-  } catch {
-    // file:// protocol may block WebSocket, fallback to demo hint
-    addLine('WebSocket bloqué (file://). Double-clic pour le mode démo.', 'system')
+  try { ws = new WebSocket('ws://127.0.0.1:' + port) } catch {
+    addLine('WebSocket blocked (file://). Double-click to start demo.', 'system')
     return
   }
-
   ws.onopen = () => {
     statusEl.textContent = 'LIVE'
-    statusEl.style.color = '#b5bd68'
+    statusEl.style.color = 'var(--teal)'
     startTime = Date.now()
     timerInterval = setInterval(updateTimer, 1000)
-    addLine('Connecté au call prompter', 'system')
+    addLine('Connected to Call Prompter', 'system')
   }
-
-  ws.onmessage = (e) => {
-    handleMessage(e.data)
-  }
-
+  ws.onmessage = (e) => handleMessage(e.data)
   ws.onclose = () => {
     statusEl.textContent = 'DISCONNECTED'
-    statusEl.style.color = '#cc6666'
+    statusEl.style.color = 'var(--danger-color)'
     clearInterval(timerInterval)
-    addLine('Déconnecté. Reconnexion dans 3s...', 'system')
+    addLine('Disconnected. Reconnecting in 3s...', 'system')
     setTimeout(connect, 3000)
   }
-
-  ws.onerror = () => {
-    try { ws.close() } catch {}
-  }
+  ws.onerror = () => { try { ws.close() } catch {} }
 }
 
 function handleMessage(raw) {
@@ -484,10 +508,9 @@ function handleMessage(raw) {
     switch (msg.type) {
       case 'transcript': {
         const speaker = (msg.speaker || '?').toLowerCase()
-        const isJonas = speaker.includes('jonas') || speaker.includes('you') || speaker.includes('moi')
-        const isProspect = !isJonas
-        const speakerClass = isJonas ? 'jonas' : 'prospect'
-        const lineClass = isJonas ? 'transcript-jonas' : 'transcript-prospect'
+        const isMe = speaker.includes('jonas') || speaker.includes('you') || speaker.includes('moi')
+        const lineClass = isMe ? 'transcript-jonas' : 'transcript-prospect'
+        const speakerClass = isMe ? 'jonas' : 'prospect'
         addLine('<span class="speaker ' + speakerClass + '">' + (msg.speaker || '?') + '</span> ' + msg.text, lineClass)
         break
       }
@@ -496,36 +519,34 @@ function handleMessage(raw) {
         addSidebarBullet(pointsList, msg.text)
         break
       case 'suggestion':
-        addLine('<span class="label">Dis</span>' + msg.text, 'suggestion')
+        addLine('<span class="label">Say</span>' + msg.text, 'suggestion')
         addSidebarBullet(actionsList, msg.text)
         break
       case 'closing':
-        addLine('<span class="label">Close maintenant</span>' + msg.text, 'closing')
+        addLine('<span class="label">Close Now</span>' + msg.text, 'closing')
         addSidebarBullet(actionsList, msg.text, 'hot')
         break
       case 'danger':
-        addLine('<span class="label">Attention</span>' + msg.text, 'danger')
+        addLine('<span class="label">Warning</span>' + msg.text, 'danger')
         addSidebarBullet(pointsList, msg.text, 'danger')
         break
       case 'objection':
         addLine('<span class="label">Objection</span>' + msg.text, 'objection')
-        if (msg.response) addLine('<span class="label">Dis</span>' + msg.response, 'suggestion')
-        addSidebarBullet(objectionsList, msg.text + (msg.response ? ' → ' + msg.response : ''))
+        if (msg.response) addLine('<span class="label">Say</span>' + msg.response, 'suggestion')
+        addSidebarBullet(objectionsList, msg.text + (msg.response ? ' — ' + msg.response : ''))
         break
       case 'sentiment':
         updateSentiment(msg.level)
         break
       case 'keyword':
         addLine('KEYWORDS: ' + msg.words.join(', '), 'keyword')
-        // Extract numbers from keywords for sidebar
         msg.words.forEach(w => {
           const num = w.match(/([\d\s,.]+[€$%hj]|[\d]+[kK])/g)
           if (num) num.forEach(n => addNumber(n.trim(), w))
         })
         break
       case 'budget':
-        addLine('<span class="label">Chiffre</span>' + msg.text, 'budget')
-        // Extract numbers for sidebar
+        addLine('<span class="label">Budget Signal</span>' + msg.text, 'budget')
         const nums = msg.text.match(/[\d\s,.]+[€$k]/g)
         if (nums) nums.forEach(n => addNumber(n.trim(), 'budget'))
         addSidebarBullet(pointsList, msg.text, 'hot')
@@ -536,13 +557,10 @@ function handleMessage(raw) {
       default:
         addLine(msg.text || JSON.stringify(msg), 'insight')
     }
-  } catch {
-    addLine(raw, 'insight')
-  }
+  } catch { addLine(raw, 'insight') }
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────
-
 const numbersList = document.getElementById('numbers-list')
 const pointsList = document.getElementById('points-list')
 const objectionsList = document.getElementById('objections-list')
@@ -563,15 +581,13 @@ function addNumber(value, label) {
   numbersList.appendChild(row)
 }
 
-// Toggle sidebar
 document.getElementById('sidebar-toggle').onclick = () => {
   document.body.classList.toggle('sidebar-hidden')
-  document.getElementById('sidebar-toggle').textContent =
-    document.body.classList.contains('sidebar-hidden') ? '▸' : '◂'
+  document.getElementById('sidebar-toggle').innerHTML =
+    document.body.classList.contains('sidebar-hidden') ? '&#9656;' : '&#9666;'
 }
 
 // ─── Controls ────────────────────────────────────────────────
-
 document.getElementById('btn-bigger').onclick = () => setFontSize(fontSize + 2)
 document.getElementById('btn-smaller').onclick = () => setFontSize(fontSize - 2)
 sizeSlider.oninput = () => setFontSize(Number(sizeSlider.value))
@@ -582,10 +598,8 @@ document.getElementById('btn-pause').onclick = () => {
   btn.textContent = paused ? 'RESUME' : 'PAUSE'
   btn.classList.toggle('active', paused)
 }
-
 document.getElementById('btn-clear').onclick = () => { feed.innerHTML = '' }
 
-// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
   if (e.key === '+' || e.key === '=') setFontSize(fontSize + 2)
   if (e.key === '-') setFontSize(fontSize - 2)
@@ -595,20 +609,14 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.exitFullscreen?.()
 })
 
-// Mouse wheel on feed = scroll (natural), Ctrl+wheel = font size
 feed.addEventListener('wheel', (e) => {
-  if (e.ctrlKey) {
-    e.preventDefault()
-    setFontSize(fontSize + (e.deltaY < 0 ? 2 : -2))
-  }
+  if (e.ctrlKey) { e.preventDefault(); setFontSize(fontSize + (e.deltaY < 0 ? 2 : -2)) }
 }, { passive: false })
 
 // ─── Auto-connect ────────────────────────────────────────────
-
 connect()
 
-// ─── Demo mode (double-click to toggle) ─────────────────────
-
+// ─── Demo mode ───────────────────────────────────────────────
 let demoMode = false
 let demoInterval = null
 const demos = [
@@ -635,19 +643,16 @@ const demos = [
 ]
 
 document.addEventListener('dblclick', (e) => {
-  // Don't trigger on bar buttons
   if (e.target.closest('#bar')) return
-
   demoMode = !demoMode
   if (demoMode) {
     let i = 0
     startTime = Date.now()
     statusEl.textContent = 'DEMO'
-    statusEl.style.color = '#f0c674'
+    statusEl.style.color = 'var(--amber)'
     clearInterval(timerInterval)
     timerInterval = setInterval(updateTimer, 1000)
     addLine('Demo mode — simulated sales call', 'system')
-
     demoInterval = setInterval(() => {
       if (i >= demos.length) i = 0
       handleMessage(JSON.stringify(demos[i++]))
@@ -657,7 +662,7 @@ document.addEventListener('dblclick', (e) => {
     clearInterval(timerInterval)
     demoInterval = null
     statusEl.textContent = 'DISCONNECTED'
-    statusEl.style.color = '#333'
+    statusEl.style.color = 'var(--text-subtle)'
     addLine('Demo mode stopped', 'system')
   }
 })
