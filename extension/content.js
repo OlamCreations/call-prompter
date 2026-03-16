@@ -1,50 +1,99 @@
 /**
  * Call Prompter — Content Script (Google Meet)
  *
- * Reads captions from Meet DOM → sends to background → WebSocket → server.
- * Uses multiple selector strategies because Meet changes its DOM frequently.
+ * Strategy: try WebSocket direct first, fallback to background bridge.
+ * Aggressive caption detection with nuclear DOM fallback.
  */
 
-// ALL known caption selectors across Meet versions
-const SELECTORS = [
-  // 2024-2026 selectors
-  '[jsname="tgaKEf"]',
-  '[jsname="YSg1Xc"]',
-  '[data-message-text]',
-  '.iOzk7',
-  '.TBMuR',
-  '.a4cQT',
-  '.oY2CYd',
-  // Generic caption-like containers
-  'div[class*="caption"] span',
-  'div[class*="Caption"] span',
-  'div[class*="subtitle"] span',
-  'div[class*="Subtitle"] span',
-  'div[class*="closed-caption"]',
-  // Broad fallback: bottom-area text containers in Meet
-  'div[jscontroller] div[jsname] span',
-]
+const WS_URL = 'ws://127.0.0.1:4242'
 
-const GARBAGE_RE = /^(arrow_downward|arrow_upward|aller en bas|go to bottom|scroll down|vous|you|meet|more_vert|present_to_all|mic_off|videocam_off|call_end|chat|people|info)$/i
-
+let ws = null
+let wsConnected = false
+let bgBridge = false
 let lastSentText = ''
 let debounceTimer = null
-let currentCaption = ''
 let foundSelector = null
 let scanCount = 0
 
-function log(msg) {
-  console.log(`%c[Call Prompter]%c ${msg}`, 'color:#0D9488;font-weight:bold', 'color:inherit')
+// ─── Logging (always visible in Meet console) ───────────────
+
+function log(msg) { console.log('%c[CallPrompter]%c ' + msg, 'color:#0D9488;font-weight:bold;font-size:13px', 'color:inherit;font-size:12px') }
+function warn(msg) { console.warn('%c[CallPrompter]%c ' + msg, 'color:#D8A15A;font-weight:bold;font-size:13px', 'color:inherit;font-size:12px') }
+function err(msg) { console.error('%c[CallPrompter]%c ' + msg, 'color:#E06060;font-weight:bold;font-size:13px', 'color:inherit;font-size:12px') }
+
+log('=== CONTENT SCRIPT LOADED on ' + window.location.href + ' ===')
+
+// ─── Connection: WebSocket direct, fallback to background ───
+
+function connect() {
+  log('Attempting WebSocket direct to ' + WS_URL + '...')
+  try {
+    ws = new WebSocket(WS_URL)
+    ws.onopen = () => {
+      wsConnected = true
+      bgBridge = false
+      log('WebSocket DIRECT connected!')
+    }
+    ws.onclose = () => {
+      wsConnected = false
+      log('WebSocket closed. Retry in 5s...')
+      setTimeout(connect, 5000)
+    }
+    ws.onerror = (e) => {
+      warn('WebSocket direct failed (CSP?). Falling back to background bridge.')
+      wsConnected = false
+      ws = null
+      useBgBridge()
+    }
+  } catch (e) {
+    warn('WebSocket blocked: ' + e.message + '. Using background bridge.')
+    useBgBridge()
+  }
 }
 
-function warn(msg) {
-  console.warn(`%c[Call Prompter]%c ${msg}`, 'color:#D8A15A;font-weight:bold', 'color:inherit')
+function useBgBridge() {
+  bgBridge = true
+  log('Using chrome.runtime background bridge')
 }
+
+function sendCaption(text) {
+  const msg = { type: 'caption', text, ts: Date.now(), source: 'extension' }
+
+  if (wsConnected && ws && ws.readyState === 1) {
+    ws.send(JSON.stringify(msg))
+    log('SENT (WS): "' + text.slice(0, 50) + '"')
+    return
+  }
+
+  if (bgBridge) {
+    try {
+      chrome.runtime.sendMessage(msg, (resp) => {
+        if (chrome.runtime.lastError) {
+          err('Background bridge error: ' + chrome.runtime.lastError.message)
+        } else if (resp?.ok) {
+          log('SENT (BG): "' + text.slice(0, 50) + '"')
+        } else {
+          warn('Background bridge: server not connected')
+        }
+      })
+    } catch (e) {
+      err('chrome.runtime.sendMessage failed: ' + e.message)
+    }
+    return
+  }
+
+  warn('No connection available. Caption dropped: "' + text.slice(0, 40) + '"')
+}
+
+// ─── Caption detection ──────────────────────────────────────
+
+const GARBAGE_RE = /^(arrow_downward|arrow_upward|aller en bas|go to bottom|scroll down|vous|you|meet|more_vert|present_to_all|mic_off|mic|videocam_off|videocam|call_end|chat|people|info|close|cancel|check)$/i
 
 function cleanText(raw) {
-  const parts = raw.split(/\n|\r/).map(s => s.trim()).filter(Boolean)
-  return parts
-    .filter(p => !GARBAGE_RE.test(p) && p.length > 2)
+  return raw
+    .split(/\n|\r/)
+    .map(s => s.trim())
+    .filter(p => p.length > 2 && !GARBAGE_RE.test(p))
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -53,123 +102,104 @@ function cleanText(raw) {
 function scanForCaptions() {
   scanCount++
 
-  // If we already found a working selector, try it first
+  // Strategy 1: Known selectors
+  const selectors = [
+    '[jsname="tgaKEf"]', '[jsname="YSg1Xc"]', '[data-message-text]',
+    '.iOzk7', '.TBMuR', '.a4cQT', '.oY2CYd',
+    'div[class*="caption"]', 'div[class*="Caption"]',
+    'div[class*="subtitle"]', 'div[class*="Subtitle"]',
+    'div[class*="closed-caption"]',
+  ]
+
   if (foundSelector) {
-    const text = extractText(foundSelector)
-    if (text) return onNewText(text)
+    const text = extractFromSelector(foundSelector)
+    if (text) return processCaption(text)
   }
 
-  // Try all selectors
-  for (const sel of SELECTORS) {
-    const text = extractText(sel)
+  for (const sel of selectors) {
+    const text = extractFromSelector(sel)
     if (text) {
       if (!foundSelector) {
         foundSelector = sel
-        log('Found captions using selector: ' + sel)
+        log('FOUND working selector: ' + sel)
       }
-      return onNewText(text)
+      return processCaption(text)
     }
   }
 
-  // Nuclear fallback: scan ALL visible text near bottom of screen
-  // Meet captions are typically in the bottom 20% of the page
-  if (scanCount % 10 === 0) {
-    const allDivs = document.querySelectorAll('div')
-    for (const div of allDivs) {
-      const rect = div.getBoundingClientRect()
-      // Only look at elements in the bottom portion of the screen
-      if (rect.top < window.innerHeight * 0.7) continue
-      if (rect.height > 200 || rect.height < 10) continue
+  // Strategy 2: Nuclear fallback — find text in bottom 30% of screen
+  const allEls = document.querySelectorAll('div, span')
+  for (const el of allEls) {
+    const rect = el.getBoundingClientRect()
+    if (rect.top < window.innerHeight * 0.65) continue
+    if (rect.height > 150 || rect.height < 8) continue
+    if (rect.width < 100) continue
+    if (el.querySelector('button, input, [role="button"]')) continue
 
-      const text = cleanText(div.textContent || '')
-      // Caption-like: has words, not too long, not a button
-      if (text.length > 10 && text.length < 500 && text.includes(' ') && !div.querySelector('button')) {
-        if (!foundSelector) {
-          warn('Using fallback bottom-screen text scan')
-        }
-        return onNewText(text)
-      }
+    const text = cleanText(el.innerText || '')
+    if (text.length > 5 && text.length < 500 && text.includes(' ')) {
+      if (scanCount <= 5) log('NUCLEAR fallback found text at bottom of screen')
+      return processCaption(text)
     }
   }
 
-  // Log every 30 scans if nothing found
-  if (scanCount % 30 === 0) {
-    warn('No captions found after ' + scanCount + ' scans. Make sure captions (CC) are enabled.')
-  }
+  // Log periodically
+  if (scanCount === 5) warn('5 scans, no captions yet. Is CC enabled?')
+  if (scanCount === 30) warn('30 scans, still no captions. Check Meet CC button.')
+  if (scanCount % 60 === 0) warn(scanCount + ' scans, no captions. Selectors may need update.')
 }
 
-function extractText(selector) {
-  const els = document.querySelectorAll(selector)
+function extractFromSelector(sel) {
+  const els = document.querySelectorAll(sel)
   if (els.length === 0) return ''
-
   const texts = []
   els.forEach(el => {
-    // Get direct text content, skip nested buttons/icons
     const clone = el.cloneNode(true)
-    clone.querySelectorAll('button, [role="button"], i, .material-icons, [class*="icon"]').forEach(x => x.remove())
-    const t = clone.textContent.trim()
-    if (t) texts.push(t)
+    clone.querySelectorAll('button, [role="button"], i, svg, [class*="icon"]').forEach(x => x.remove())
+    const t = (clone.innerText || clone.textContent || '').trim()
+    if (t && t.length > 1) texts.push(t)
   })
-
   return cleanText(texts.join(' '))
 }
 
-function onNewText(text) {
-  if (!text || text === currentCaption) return
+let currentCaption = ''
+function processCaption(text) {
+  if (text === currentCaption) return
   currentCaption = text
 
   clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => {
     if (currentCaption && currentCaption !== lastSentText) {
       lastSentText = currentCaption
-      log('Caption: "' + currentCaption.slice(0, 60) + (currentCaption.length > 60 ? '..."' : '"'))
-
-      chrome.runtime.sendMessage({
-        type: 'caption',
-        text: currentCaption,
-        ts: Date.now(),
-      }, (response) => {
-        if (chrome.runtime.lastError) {
-          warn('Send failed: ' + chrome.runtime.lastError.message)
-        }
-      })
+      sendCaption(currentCaption)
     }
-  }, 1500)
+  }, 1200)
 }
 
-// ─── Observer + Poll ─────────────────────────────────────────
+// ─── Observer + aggressive poll ─────────────────────────────
 
 const observer = new MutationObserver(() => scanForCaptions())
 
 function start() {
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    characterData: true,
-  })
-  // Poll every 1s as backup
-  setInterval(scanForCaptions, 1000)
-  log('Started on ' + window.location.href)
-  log('Scanning for captions... (enable CC in Meet if not already)')
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  setInterval(scanForCaptions, 800)
+  log('Observer + poll started. Scanning for captions every 800ms...')
+  log('If no captions appear, make sure:')
+  log('  1. You are in a Meet call (not the lobby)')
+  log('  2. CC button is enabled (bottom bar)')
+  log('  3. You or someone is speaking')
 }
 
-// ─── Message handler for popup ───────────────────────────────
+// ─── Status for popup ───────────────────────────────────────
 
 chrome.runtime?.onMessage?.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'getStatus') {
-    sendResponse({
-      lastText: lastSentText.slice(0, 50),
-      foundSelector,
-      scanCount,
-      url: window.location.href,
-    })
+    sendResponse({ lastText: lastSentText.slice(0, 50), foundSelector, scanCount, wsConnected, bgBridge })
   }
 })
 
-// ─── Start ───────────────────────────────────────────────────
+// ─── Init ───────────────────────────────────────────────────
 
-if (document.readyState === 'complete') {
-  start()
-} else {
-  window.addEventListener('load', start)
-}
+connect()
+if (document.readyState === 'complete') start()
+else window.addEventListener('load', start)
