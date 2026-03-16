@@ -113,7 +113,18 @@ const clients = new Set()
 wss.on('connection', (ws) => {
   clients.add(ws)
   ws.on('close', () => clients.delete(ws))
-  broadcast({ type: 'system', text: `Prompter actif — ${prospect} — ${context}` })
+
+  // Accept captions from Chrome extension (no CDP needed)
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw)
+      if (msg.type === 'caption' && msg.text) {
+        onCaptionReceived(msg.text)
+      }
+    } catch {}
+  })
+
+  broadcast({ type: 'system', text: `Prompter active — ${prospect} — ${context}` })
 })
 
 function broadcast(msg) {

@@ -74,29 +74,49 @@ bun server.mjs --demo
 open ui.html
 ```
 
-## Live mode (real Google Meet call)
+## Live mode — 3 ways to connect
 
-### 1. Setup Chrome (one-time)
+### Option A: Chrome Extension (recommended)
 
-```bash
-node setup.mjs
-```
-
-This automatically configures Chrome to enable caption capture. Restart Chrome after setup.
-
-To undo: `node setup.mjs --undo`
-
-### 2. Join your Google Meet and enable captions (CC button)
-
-### 3. Start the prompter
+No special Chrome flags. No restart. Just install and go.
 
 ```bash
+# 1. Open chrome://extensions
+# 2. Enable "Developer mode" (top right)
+# 3. Click "Load unpacked" → select the extension/ folder
+# 4. Start the server:
 bun server.mjs --prospect="Acme Corp" --context="Discovery call"
+# 5. Join Google Meet, enable captions (CC button)
+# 6. Open ui.html on your second screen
 ```
 
-### 4. Open `ui.html` in your browser (second screen)
+The extension auto-detects Meet tabs and streams captions to the server.
 
-The prompter auto-connects via WebSocket on port 4242.
+### Option B: Bookmarklet (zero install)
+
+```bash
+# 1. Start the server:
+bun server.mjs --prospect="Acme Corp"
+# 2. Create a bookmark with this URL (see bookmarklet.js for full code):
+#    javascript:void((()=>{const W='ws://127.0.0.1:4242'...})())
+# 3. Join Google Meet, enable captions
+# 4. Click the bookmarklet
+# 5. Open ui.html
+```
+
+### Option C: Chrome CDP (advanced)
+
+For power users. Requires Chrome launched with a special flag.
+
+```bash
+# 1. One-time setup:
+node setup.mjs
+# 2. Restart Chrome
+# 3. Start the server:
+bun server.mjs --prospect="Acme Corp"
+# 4. Or use watch mode (auto-detects Meet tabs):
+bun watch.mjs
+```
 
 ## Watch mode (auto-detect Meet)
 

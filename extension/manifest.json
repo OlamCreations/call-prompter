@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Call Prompter",
+  "version": "1.0.0",
+  "description": "Real-time AI sales co-pilot for Google Meet. Captures captions and streams insights.",
+  "permissions": ["activeTab"],
+  "host_permissions": ["https://meet.google.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon48.png"
+  }
+}

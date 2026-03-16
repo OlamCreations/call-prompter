@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 280px;
+  background: #0D0B0A;
+  color: #F9F5EF;
+  font-family: 'Segoe UI', sans-serif;
+  padding: 16px;
+}
+h1 { font-size: 14px; font-weight: 400; margin-bottom: 12px; letter-spacing: 1px; }
+.status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.on { background: #0D9488; box-shadow: 0 0 6px #0D9488; }
+.dot.off { background: #993333; }
+.info { color: #706862; font-size: 11px; line-height: 1.5; margin-bottom: 12px; }
+a { color: #2DD4BF; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.btn {
+  display: block; width: 100%; padding: 8px;
+  background: rgba(13,148,136,0.1); border: 1px solid rgba(13,148,136,0.2);
+  color: #2DD4BF; border-radius: 8px; cursor: pointer;
+  font-size: 11px; text-align: center; font-family: inherit;
+}
+.btn:hover { background: rgba(13,148,136,0.2); }
+</style>
+</head>
+<body>
+<h1>CALL PROMPTER</h1>
+<div class="status">
+  <div class="dot" id="dot"></div>
+  <span id="status-text">Checking...</span>
+</div>
+<div class="info" id="info"></div>
+<button class="btn" id="open-ui" style="margin-bottom: 8px">Open Prompter UI</button>
+<button class="btn" id="help">Setup Guide</button>
+<script>
+const dot = document.getElementById('dot')
+const statusText = document.getElementById('status-text')
+const info = document.getElementById('info')
+
+// Check if on Meet
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  const tab = tabs[0]
+  if (tab?.url?.includes('meet.google.com')) {
+    chrome.tabs.sendMessage(tab.id, { type: 'getStatus' }, (res) => {
+      if (res?.connected) {
+        dot.className = 'dot on'
+        statusText.textContent = 'Connected to server'
+        info.textContent = 'Captions are being captured and analyzed in real-time.'
+      } else {
+        dot.className = 'dot off'
+        statusText.textContent = 'Server not running'
+        info.innerHTML = 'Start the server:<br><code>bun server.mjs --prospect="Client"</code>'
+      }
+    })
+  } else {
+    dot.className = 'dot off'
+    statusText.textContent = 'Not on Google Meet'
+    info.textContent = 'Open a Google Meet call to start capturing captions.'
+  }
+})
+
+document.getElementById('open-ui').onclick = () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('../ui.html') })
+}
+
+document.getElementById('help').onclick = () => {
+  chrome.tabs.create({ url: 'https://github.com/OlamCreations/call-prompter' })
+}
+</script>
+</body>
+</html>
