@@ -485,8 +485,12 @@ function setFontSize(size) {
 }
 setFontSize(fontSize)
 
+// Track if we should show messages (idle = waiting state)
+let receiving = false
+
 function addLine(text, type = 'insight') {
   if (paused) return
+  if (!receiving && !demoMode) return // Ignore server messages when idle
   const div = document.createElement('div')
   div.className = 'line ' + type
   const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
@@ -540,28 +544,85 @@ function updateTimer() {
   timerEl.textContent = m + ':' + s
 }
 
+let noCaptionTimer = null
+let captionCount = 0
+
 function connect() {
   const port = new URLSearchParams(window.location.search).get('port') || '4242'
   try { ws = new WebSocket('ws://127.0.0.1:' + port) } catch {
-    addLine('WebSocket blocked (file://). Double-click to start demo.', 'system')
+    showIdle('WebSocket blocked (file://). Click DEMO to preview.')
     return
   }
   ws.onopen = () => {
-    statusEl.textContent = 'LIVE'
-    statusEl.style.color = 'var(--teal)'
-    startTime = Date.now()
-    timerInterval = setInterval(updateTimer, 1000)
-    addLine('Connected to Call Prompter', 'system')
+    statusEl.textContent = 'READY'
+    statusEl.style.color = 'var(--teal-muted)'
+    showIdle('Connected to server. Waiting for Google Meet captions...')
+
+    // Start a 30s timer — if no captions arrive, warn about captions being off
+    noCaptionTimer = setTimeout(() => {
+      if (captionCount === 0 && !demoMode) {
+        showWarning('No captions detected after 30s. Make sure:\n1. You are on a Google Meet call\n2. Captions are enabled (CC button)\n3. The spoken language matches the caption language setting')
+      }
+    }, 30000)
   }
-  ws.onmessage = (e) => handleMessage(e.data)
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data)
+      // First real caption → switch from idle to live
+      if (msg.type === 'transcript' || msg.type === 'caption') {
+        if (!receiving && !demoMode) {
+          receiving = true
+          clearIdle()
+          clearTimeout(noCaptionTimer)
+          statusEl.textContent = 'LIVE'
+          statusEl.style.color = 'var(--teal)'
+          startTime = Date.now()
+          clearInterval(timerInterval)
+          timerInterval = setInterval(updateTimer, 1000)
+        }
+        captionCount++
+      }
+      handleMessage(e.data)
+    } catch {
+      handleMessage(e.data)
+    }
+  }
   ws.onclose = () => {
     statusEl.textContent = 'DISCONNECTED'
     statusEl.style.color = 'var(--danger-color)'
     clearInterval(timerInterval)
-    addLine('Disconnected. Reconnecting in 3s...', 'system')
+    receiving = false
+    if (!demoMode) {
+      showIdle('Disconnected from server. Reconnecting...')
+    }
     setTimeout(connect, 3000)
   }
   ws.onerror = () => { try { ws.close() } catch {} }
+}
+
+function showIdle(msg) {
+  const existing = document.getElementById('idle-msg')
+  if (existing) existing.remove()
+  const div = document.createElement('div')
+  div.id = 'idle-msg'
+  div.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:var(--text-muted);font-size:14px;line-height:1.8;max-width:400px;'
+  div.textContent = msg
+  feed.appendChild(div)
+}
+
+function showWarning(msg) {
+  const existing = document.getElementById('idle-msg')
+  if (existing) existing.remove()
+  const div = document.createElement('div')
+  div.id = 'idle-msg'
+  div.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;max-width:450px;padding:24px;border-radius:16px;background:var(--amber-bg);border:1px solid rgba(216,161,90,0.2);'
+  div.innerHTML = '<div style="color:var(--amber);font-family:var(--font-serif);font-size:12px;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;">No Captions Detected</div><div style="color:var(--text-sec);font-size:13px;line-height:1.8;white-space:pre-line;">' + msg + '</div>'
+  feed.appendChild(div)
+}
+
+function clearIdle() {
+  const idle = document.getElementById('idle-msg')
+  if (idle) idle.remove()
 }
 
 function handleMessage(raw) {
@@ -730,40 +791,60 @@ const demos = [
 
 let demoIdx = 0
 function toggleDemo() {
-  demoMode = !demoMode
   const btn = document.getElementById('btn-demo')
-  if (demoMode) {
+
+  if (!demoMode) {
+    // START demo
+    demoMode = true
     demoIdx = 0
+    clearAll()
+    clearIdle()
     startTime = Date.now()
     statusEl.textContent = 'DEMO'
     statusEl.style.color = 'var(--amber)'
     clearInterval(timerInterval)
     timerInterval = setInterval(updateTimer, 1000)
-    addLine('Demo mode — simulated sales call', 'system')
     btn.textContent = 'STOP DEMO'
     btn.classList.add('active')
+
+    // Clear any previous interval before setting new one
+    if (demoInterval) clearInterval(demoInterval)
     demoInterval = setInterval(() => {
       if (demoIdx >= demos.length) demoIdx = 0
       handleMessage(JSON.stringify(demos[demoIdx++]))
     }, 2500)
   } else {
-    clearInterval(demoInterval)
+    // STOP demo — full reset
+    demoMode = false
+
+    // Kill interval FIRST
+    if (demoInterval) { clearInterval(demoInterval); demoInterval = null }
     clearInterval(timerInterval)
-    demoInterval = null
-    // Full reset — clear feed + sidebar + status
+
+    // Clear everything
     clearAll()
-    statusEl.textContent = 'DISCONNECTED'
-    statusEl.style.color = 'var(--text-subtle)'
+    statusEl.textContent = ws?.readyState === 1 ? 'READY' : 'DISCONNECTED'
+    statusEl.style.color = ws?.readyState === 1 ? 'var(--teal-muted)' : 'var(--text-subtle)'
     timerEl.textContent = '00:00'
     sentimentEl.innerHTML = '<span class="sentiment-dot"></span>--'
     startTime = null
+    receiving = false
+    captionCount = 0
     btn.textContent = 'DEMO'
     btn.classList.remove('active')
+
+    // Show idle state
+    if (ws?.readyState === 1) {
+      showIdle('Connected to server. Waiting for Google Meet captions...')
+    } else {
+      showIdle('Disconnected. Start server with: bun server.mjs')
+    }
   }
 }
 
+// Double-click on feed area also toggles demo (backward compat)
 document.addEventListener('dblclick', (e) => {
-  if (e.target.closest('#bar')) return
+  if (e.target.closest('#bar') || e.target.closest('#sidebar')) return
   toggleDemo()
 })
 </script>
