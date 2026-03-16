@@ -41,10 +41,10 @@ select:focus, input:focus { border-color: rgba(13,148,136,0.3); }
 
 <label>AI Provider</label>
 <select id="provider">
-  <option value="ollama">Ollama (Local, free) -- recommended</option>
+  <option value="claude">Claude Code CLI -- recommended (no key needed)</option>
+  <option value="ollama">Ollama (Local, free, no key needed)</option>
   <option value="openai">OpenAI (GPT-4o)</option>
-  <option value="anthropic">Anthropic (Claude)</option>
-  <option value="claude">Claude Code CLI</option>
+  <option value="anthropic">Anthropic (Claude API)</option>
   <option value="custom">Custom API</option>
 </select>
 
@@ -81,13 +81,15 @@ select:focus, input:focus { border-color: rgba(13,148,136,0.3); }
 </div>
 
 <div class="guide" id="guide-claude">
-  <div class="guide-title">Claude Code CLI <span class="tag tag-easy">no key needed</span></div>
+  <div class="guide-title">Claude Code CLI <span class="tag tag-easy">no key needed</span> <span class="tag tag-free">recommended</span></div>
   <ol>
-    <li>Install: <code>npm install -g @anthropic-ai/claude-code</code></li>
-    <li>Run <code>claude</code> in your terminal</li>
+    <li>Click the button below to install</li>
+    <li>Open a terminal and run <code>claude</code></li>
     <li>It opens your browser to log in — done</li>
     <li>No API key needed, uses your Claude account</li>
   </ol>
+  <button class="btn" id="install-claude" style="margin-top:10px;background:rgba(90,138,111,0.15);border-color:rgba(90,138,111,0.25);color:#5A8A6F">Install Claude Code CLI</button>
+  <div class="help" id="install-status" style="margin-top:6px"></div>
 </div>
 
 <div class="guide" id="guide-custom">

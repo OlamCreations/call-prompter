@@ -151,6 +151,20 @@ const httpServer = Bun?.serve?.({
       }
     }
 
+    // Install Claude CLI from extension settings
+    if (url.pathname === '/install-claude' && req.method === 'POST') {
+      try {
+        const result = execFileSync('npm', ['install', '-g', '@anthropic-ai/claude-code'], {
+          timeout: 120000,
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        return Response.json({ ok: true, output: result.trim() }, { headers: cors })
+      } catch (err) {
+        return Response.json({ ok: false, error: err.stderr?.trim() || err.message }, { status: 500, headers: cors })
+      }
+    }
+
     if (url.pathname === '/status') {
       return Response.json({ ok: true, connected: clients.size, prospect, context, provider, chunks: chunks.length, sentiment: currentSentiment }, { headers: cors })
     }

@@ -71,3 +71,39 @@ document.getElementById('save').addEventListener('click', () => {
 document.getElementById('back').addEventListener('click', () => {
   window.location.href = 'popup.html'
 })
+
+// Install Claude CLI via server
+document.getElementById('install-claude')?.addEventListener('click', () => {
+  const btn = document.getElementById('install-claude')
+  const status = document.getElementById('install-status')
+  btn.disabled = true
+  btn.textContent = 'Installing...'
+  status.textContent = 'Running npm install -g @anthropic-ai/claude-code ...'
+  status.style.color = '#D8A15A'
+
+  fetch(SERVER + '/install-claude', { method: 'POST', signal: AbortSignal.timeout(120000) })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        btn.textContent = 'Installed'
+        btn.style.color = '#0D9488'
+        btn.style.borderColor = 'rgba(13,148,136,0.3)'
+        status.textContent = 'Claude Code CLI installed. Open a terminal and run: claude'
+        status.style.color = '#0D9488'
+      } else {
+        btn.textContent = 'Install Failed'
+        btn.style.color = '#E06060'
+        status.textContent = data.error || 'Installation failed. Try manually: npm install -g @anthropic-ai/claude-code'
+        status.style.color = '#E06060'
+        btn.disabled = false
+        setTimeout(() => { btn.textContent = 'Retry Install' }, 3000)
+      }
+    })
+    .catch(() => {
+      btn.textContent = 'Server Offline'
+      btn.disabled = false
+      status.textContent = 'Server not running. Start it first, or install manually: npm install -g @anthropic-ai/claude-code'
+      status.style.color = '#E06060'
+      setTimeout(() => { btn.textContent = 'Install Claude Code CLI' }, 3000)
+    })
+})
