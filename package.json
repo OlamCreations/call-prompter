@@ -1,0 +1,37 @@
+{
+  "name": "call-prompter",
+  "version": "1.0.0",
+  "description": "Real-time AI sales co-pilot for Google Meet. Captures live captions, analyzes conversation, streams closing strategies.",
+  "type": "module",
+  "main": "server.mjs",
+  "bin": {
+    "call-prompter": "./cli.mjs"
+  },
+  "scripts": {
+    "start": "bun server.mjs",
+    "demo": "bun server.mjs --demo",
+    "watch": "bun watch.mjs"
+  },
+  "keywords": [
+    "ai",
+    "sales",
+    "google-meet",
+    "real-time",
+    "teleprompter",
+    "co-pilot",
+    "closing",
+    "chrome-cdp",
+    "websocket",
+    "llm"
+  ],
+  "author": "Olam Creations <jonas@olam-creations.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OlamCreations/call-prompter"
+  },
+  "engines": {
+    "bun": ">=1.0.0",
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Metatron Call Prompter</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0a;
+  color: #e0e0e0;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  height: 100vh;
+  overflow: hidden;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+}
+#main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+#feed {
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+#sidebar {
+  width: 320px;
+  background: #0f0f0f;
+  border-left: 1px solid #1a1a1a;
+  padding: 16px;
+  overflow-y: auto;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+#sidebar::-webkit-scrollbar { width: 4px; }
+#sidebar::-webkit-scrollbar-thumb { background: #222; }
+#sidebar .section { }
+#sidebar .section-title {
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #1a1a1a;
+  padding-bottom: 4px;
+}
+#sidebar .bullet {
+  color: #999;
+  margin-bottom: 6px;
+  line-height: 1.5;
+  padding-left: 12px;
+  text-indent: -8px;
+}
+#sidebar .bullet::before { content: '· '; color: #555; }
+#sidebar .bullet.hot { color: #f0c674; }
+#sidebar .bullet.hot::before { color: #f0c674; }
+#sidebar .bullet.danger { color: #cc6666; }
+#sidebar .bullet.danger::before { color: #cc6666; content: '! '; }
+#sidebar .number { color: #b294bb; font-weight: bold; font-size: 18px; }
+#sidebar .number-label { color: #666; font-size: 11px; }
+#sidebar .number-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+#sidebar-toggle {
+  position: absolute;
+  right: 320px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #555;
+  padding: 8px 4px;
+  cursor: pointer;
+  font-size: 10px;
+  z-index: 10;
+  border-right: none;
+  border-radius: 3px 0 0 3px;
+  transition: right 0.2s;
+}
+#sidebar-toggle:hover { color: #aaa; }
+body.sidebar-hidden #sidebar { display: none; }
+body.sidebar-hidden #sidebar-toggle { right: 0; }
+#feed::-webkit-scrollbar { width: 6px; }
+#feed::-webkit-scrollbar-track { background: #111; }
+#feed::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+#feed::-webkit-scrollbar-thumb:hover { background: #555; }
+
+.line { margin-bottom: 12px; line-height: 1.6; opacity: 0; animation: fadein 0.3s forwards; }
+@keyframes fadein { to { opacity: 1; } }
+
+.line .ts { color: #383838; font-size: 0.6em; margin-right: 10px; font-variant-numeric: tabular-nums; }
+
+/* ── PROSPECT: green accent ────────────────────────────────── */
+.line.transcript-prospect {
+  border-left: 4px solid #5a9a5a;
+  padding: 10px 16px;
+  margin: 6px 0;
+  background: rgba(90, 154, 90, 0.06);
+  border-radius: 0 6px 6px 0;
+  color: #b0d4a0;
+}
+.line.transcript-prospect .speaker {
+  color: #6abf6a;
+  font-weight: bold;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: block;
+  margin-bottom: 3px;
+}
+
+/* ── JONAS: white, clean ───────────────────────────────────── */
+.line.transcript-jonas {
+  padding: 6px 16px 6px 24px;
+  margin: 2px 0;
+  color: #ccc;
+  font-size: 0.9em;
+}
+.line.transcript-jonas .speaker {
+  color: #fff;
+  font-weight: bold;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: inline;
+  margin-right: 8px;
+}
+
+/* ── INSIGHT: small italic context ─────────────────────────── */
+.line.insight {
+  color: #888;
+  padding: 2px 16px 2px 24px;
+  font-size: 0.85em;
+  font-style: italic;
+}
+
+/* ── SUGGESTION: green card — what to DO ───────────────────── */
+.line.suggestion {
+  border-left: 4px solid #8fae53;
+  padding: 10px 16px;
+  margin: 10px 0;
+  background: rgba(143, 174, 83, 0.08);
+  border-radius: 0 6px 6px 0;
+  color: #b5cc7a;
+}
+.line.suggestion .label {
+  display: block;
+  font-size: 0.65em;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #6a8a3a;
+  margin-bottom: 4px;
+}
+
+/* ── CLOSING: gold card — BIGGEST, can't miss ──────────────── */
+.line.closing {
+  border-left: 5px solid #e8b828;
+  padding: 14px 18px;
+  margin: 14px 0;
+  background: rgba(232, 184, 40, 0.10);
+  border-radius: 0 8px 8px 0;
+  color: #f0d060;
+  font-weight: bold;
+  font-size: 1.1em;
+}
+.line.closing .label {
+  display: block;
+  font-size: 0.6em;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: #a08020;
+  margin-bottom: 5px;
+}
+
+/* ── DANGER: red card — attention NOW ──────────────────────── */
+.line.danger {
+  border-left: 5px solid #d44;
+  padding: 14px 18px;
+  margin: 14px 0;
+  background: rgba(221, 68, 68, 0.10);
+  border-radius: 0 8px 8px 0;
+  color: #e87070;
+  font-weight: bold;
+  font-size: 1.1em;
+}
+.line.danger .label {
+  display: block;
+  font-size: 0.6em;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: #993333;
+  margin-bottom: 5px;
+}
+
+/* ── OBJECTION: orange card ────────────────────────────────── */
+.line.objection {
+  border-left: 4px solid #d48a3a;
+  padding: 10px 16px;
+  margin: 10px 0;
+  background: rgba(212, 138, 58, 0.07);
+  border-radius: 0 6px 6px 0;
+  color: #dda050;
+}
+.line.objection .label {
+  display: block;
+  font-size: 0.65em;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #8a5a20;
+  margin-bottom: 4px;
+}
+
+/* ── BUDGET: purple card ───────────────────────────────────── */
+.line.budget {
+  border-left: 4px solid #9a6abf;
+  padding: 10px 16px;
+  margin: 10px 0;
+  background: rgba(154, 106, 191, 0.07);
+  border-radius: 0 6px 6px 0;
+  color: #c090e0;
+  font-weight: bold;
+}
+.line.budget .label {
+  display: block;
+  font-size: 0.65em;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #6a4a8a;
+  margin-bottom: 4px;
+}
+
+/* ── KEYWORD: subtle tags ──────────────────────────────────── */
+.line.keyword {
+  color: #5a8a7a;
+  font-size: 0.75em;
+  padding: 2px 24px;
+  opacity: 0.7;
+}
+
+/* ── SENTIMENT: tiny indicator ─────────────────────────────── */
+.line.sentiment { color: #444; text-transform: uppercase; letter-spacing: 3px; font-size: 0.65em; padding: 1px 24px; }
+
+/* ── SYSTEM: ghost text ────────────────────────────────────── */
+.line.system { color: #2a2a2a; font-style: italic; font-size: 0.75em; padding: 2px 24px; }
+
+#bar {
+  height: 48px;
+  background: #111;
+  border-top: 1px solid #222;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #555;
+  user-select: none;
+}
+#bar .left { display: flex; gap: 24px; align-items: center; }
+#bar .right { display: flex; gap: 12px; align-items: center; }
+#bar .sentiment-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  display: inline-block; margin-right: 6px;
+}
+.dot-hot { background: #f0c674; box-shadow: 0 0 6px #f0c674; }
+.dot-warm { background: #b5bd68; box-shadow: 0 0 6px #b5bd68; }
+.dot-cool { background: #6a9fb5; }
+.dot-cold { background: #cc6666; box-shadow: 0 0 6px #cc6666; }
+
+#bar button {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #888;
+  padding: 4px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+#bar button:hover { border-color: #666; color: #ccc; background: #222; }
+#bar button:active { background: #333; }
+#bar button.active { border-color: #b5bd68; color: #b5bd68; }
+
+#bar .size-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#bar .size-controls button {
+  width: 32px;
+  text-align: center;
+  font-weight: bold;
+}
+#bar .size-controls .size-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100px;
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+#bar .size-controls .size-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #888;
+  border-radius: 50%;
+  cursor: pointer;
+}
+#bar .size-controls .size-slider::-webkit-slider-thumb:hover { background: #aaa; }
+
+#bar #status { font-weight: bold; letter-spacing: 1px; }
+#bar #font-size-display { color: #666; min-width: 28px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="main">
+  <div id="feed"></div>
+  <button id="sidebar-toggle">◂</button>
+  <div id="sidebar">
+    <div class="section" id="sec-numbers">
+      <div class="section-title">Chiffres clés</div>
+      <div id="numbers-list"></div>
+    </div>
+    <div class="section" id="sec-points">
+      <div class="section-title">Points clés</div>
+      <div id="points-list"></div>
+    </div>
+    <div class="section" id="sec-objections">
+      <div class="section-title">Objections</div>
+      <div id="objections-list"></div>
+    </div>
+    <div class="section" id="sec-actions">
+      <div class="section-title">Next steps</div>
+      <div id="actions-list"></div>
+    </div>
+  </div>
+</div>
+<div id="bar">
+  <div class="left">
+    <span id="status">DISCONNECTED</span>
+    <span id="timer">00:00</span>
+    <span id="sentiment-display"><span class="sentiment-dot"></span>--</span>
+  </div>
+  <div class="right">
+    <div class="size-controls">
+      <button id="btn-smaller">-</button>
+      <input type="range" class="size-slider" id="size-slider" min="10" max="48" value="18">
+      <button id="btn-bigger">+</button>
+      <span id="font-size-display">18px</span>
+    </div>
+    <button id="btn-pause">PAUSE</button>
+    <button id="btn-clear">CLEAR</button>
+  </div>
+</div>
+
+<script>
+const feed = document.getElementById('feed')
+const statusEl = document.getElementById('status')
+const timerEl = document.getElementById('timer')
+const sentimentEl = document.getElementById('sentiment-display')
+const fontDisplay = document.getElementById('font-size-display')
+const sizeSlider = document.getElementById('size-slider')
+
+let fontSize = 18
+let paused = false
+let startTime = null
+let ws = null
+let timerInterval = null
+
+function setFontSize(size) {
+  fontSize = Math.max(10, Math.min(48, size))
+  feed.style.fontSize = fontSize + 'px'
+  fontDisplay.textContent = fontSize + 'px'
+  sizeSlider.value = fontSize
+}
+setFontSize(fontSize)
+
+function addLine(text, type = 'insight') {
+  if (paused) return
+  const div = document.createElement('div')
+  div.className = 'line ' + type
+  const ts = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  div.innerHTML = '<span class="ts">' + ts + '</span>' + text
+  feed.appendChild(div)
+  feed.scrollTop = feed.scrollHeight
+}
+
+function updateSentiment(level) {
+  const dots = { hot: 'dot-hot', warm: 'dot-warm', cool: 'dot-cool', cold: 'dot-cold' }
+  sentimentEl.innerHTML = '<span class="sentiment-dot ' + (dots[level] || '') + '"></span>' + level.toUpperCase()
+}
+
+function updateTimer() {
+  if (!startTime) return
+  const elapsed = Math.floor((Date.now() - startTime) / 1000)
+  const m = String(Math.floor(elapsed / 60)).padStart(2, '0')
+  const s = String(elapsed % 60).padStart(2, '0')
+  timerEl.textContent = m + ':' + s
+}
+
+function connect() {
+  const port = new URLSearchParams(window.location.search).get('port') || '4242'
+  try {
+    ws = new WebSocket('ws://127.0.0.1:' + port)
+  } catch {
+    // file:// protocol may block WebSocket, fallback to demo hint
+    addLine('WebSocket bloqué (file://). Double-clic pour le mode démo.', 'system')
+    return
+  }
+
+  ws.onopen = () => {
+    statusEl.textContent = 'LIVE'
+    statusEl.style.color = '#b5bd68'
+    startTime = Date.now()
+    timerInterval = setInterval(updateTimer, 1000)
+    addLine('Connecté au call prompter', 'system')
+  }
+
+  ws.onmessage = (e) => {
+    handleMessage(e.data)
+  }
+
+  ws.onclose = () => {
+    statusEl.textContent = 'DISCONNECTED'
+    statusEl.style.color = '#cc6666'
+    clearInterval(timerInterval)
+    addLine('Déconnecté. Reconnexion dans 3s...', 'system')
+    setTimeout(connect, 3000)
+  }
+
+  ws.onerror = () => {
+    try { ws.close() } catch {}
+  }
+}
+
+function handleMessage(raw) {
+  try {
+    const msg = JSON.parse(raw)
+    switch (msg.type) {
+      case 'transcript': {
+        const speaker = (msg.speaker || '?').toLowerCase()
+        const isJonas = speaker.includes('jonas') || speaker.includes('you') || speaker.includes('moi')
+        const isProspect = !isJonas
+        const speakerClass = isJonas ? 'jonas' : 'prospect'
+        const lineClass = isJonas ? 'transcript-jonas' : 'transcript-prospect'
+        addLine('<span class="speaker ' + speakerClass + '">' + (msg.speaker || '?') + '</span> ' + msg.text, lineClass)
+        break
+      }
+      case 'insight':
+        addLine(msg.text, 'insight')
+        addSidebarBullet(pointsList, msg.text)
+        break
+      case 'suggestion':
+        addLine('<span class="label">Dis</span>' + msg.text, 'suggestion')
+        addSidebarBullet(actionsList, msg.text)
+        break
+      case 'closing':
+        addLine('<span class="label">Close maintenant</span>' + msg.text, 'closing')
+        addSidebarBullet(actionsList, msg.text, 'hot')
+        break
+      case 'danger':
+        addLine('<span class="label">Attention</span>' + msg.text, 'danger')
+        addSidebarBullet(pointsList, msg.text, 'danger')
+        break
+      case 'objection':
+        addLine('<span class="label">Objection</span>' + msg.text, 'objection')
+        if (msg.response) addLine('<span class="label">Dis</span>' + msg.response, 'suggestion')
+        addSidebarBullet(objectionsList, msg.text + (msg.response ? ' → ' + msg.response : ''))
+        break
+      case 'sentiment':
+        updateSentiment(msg.level)
+        break
+      case 'keyword':
+        addLine('KEYWORDS: ' + msg.words.join(', '), 'keyword')
+        // Extract numbers from keywords for sidebar
+        msg.words.forEach(w => {
+          const num = w.match(/([\d\s,.]+[€$%hj]|[\d]+[kK])/g)
+          if (num) num.forEach(n => addNumber(n.trim(), w))
+        })
+        break
+      case 'budget':
+        addLine('<span class="label">Chiffre</span>' + msg.text, 'budget')
+        // Extract numbers for sidebar
+        const nums = msg.text.match(/[\d\s,.]+[€$k]/g)
+        if (nums) nums.forEach(n => addNumber(n.trim(), 'budget'))
+        addSidebarBullet(pointsList, msg.text, 'hot')
+        break
+      case 'system':
+        addLine(msg.text, 'system')
+        break
+      default:
+        addLine(msg.text || JSON.stringify(msg), 'insight')
+    }
+  } catch {
+    addLine(raw, 'insight')
+  }
+}
+
+// ─── Sidebar ─────────────────────────────────────────────────
+
+const numbersList = document.getElementById('numbers-list')
+const pointsList = document.getElementById('points-list')
+const objectionsList = document.getElementById('objections-list')
+const actionsList = document.getElementById('actions-list')
+
+function addSidebarBullet(listEl, text, cls = '') {
+  const div = document.createElement('div')
+  div.className = 'bullet' + (cls ? ' ' + cls : '')
+  div.textContent = text
+  listEl.appendChild(div)
+  listEl.parentElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+}
+
+function addNumber(value, label) {
+  const row = document.createElement('div')
+  row.className = 'number-row'
+  row.innerHTML = '<span class="number">' + value + '</span><span class="number-label">' + label + '</span>'
+  numbersList.appendChild(row)
+}
+
+// Toggle sidebar
+document.getElementById('sidebar-toggle').onclick = () => {
+  document.body.classList.toggle('sidebar-hidden')
+  document.getElementById('sidebar-toggle').textContent =
+    document.body.classList.contains('sidebar-hidden') ? '▸' : '◂'
+}
+
+// ─── Controls ────────────────────────────────────────────────
+
+document.getElementById('btn-bigger').onclick = () => setFontSize(fontSize + 2)
+document.getElementById('btn-smaller').onclick = () => setFontSize(fontSize - 2)
+sizeSlider.oninput = () => setFontSize(Number(sizeSlider.value))
+
+document.getElementById('btn-pause').onclick = () => {
+  paused = !paused
+  const btn = document.getElementById('btn-pause')
+  btn.textContent = paused ? 'RESUME' : 'PAUSE'
+  btn.classList.toggle('active', paused)
+}
+
+document.getElementById('btn-clear').onclick = () => { feed.innerHTML = '' }
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === '+' || e.key === '=') setFontSize(fontSize + 2)
+  if (e.key === '-') setFontSize(fontSize - 2)
+  if (e.key === ' ') { e.preventDefault(); document.getElementById('btn-pause').click() }
+  if (e.key === 'c' && !e.ctrlKey) feed.innerHTML = ''
+  if (e.key === 'f') document.documentElement.requestFullscreen?.()
+  if (e.key === 'Escape') document.exitFullscreen?.()
+})
+
+// Mouse wheel on feed = scroll (natural), Ctrl+wheel = font size
+feed.addEventListener('wheel', (e) => {
+  if (e.ctrlKey) {
+    e.preventDefault()
+    setFontSize(fontSize + (e.deltaY < 0 ? 2 : -2))
+  }
+}, { passive: false })
+
+// ─── Auto-connect ────────────────────────────────────────────
+
+connect()
+
+// ─── Demo mode (double-click to toggle) ─────────────────────
+
+let demoMode = false
+let demoInterval = null
+const demos = [
+  { type: 'transcript', speaker: 'Prospect', text: 'On perd environ 20 heures par semaine sur la veille manuelle...' },
+  { type: 'sentiment', level: 'warm' },
+  { type: 'keyword', words: ['veille manuelle', '20h/semaine', 'perte de temps'] },
+  { type: 'suggestion', text: 'Quantifie le coût : 20h × 50€/h = 4000€/mois de perte' },
+  { type: 'transcript', speaker: 'Jonas', text: 'Ça représente combien en coût salarial ?' },
+  { type: 'transcript', speaker: 'Prospect', text: 'Au moins 3000-4000 par mois oui...' },
+  { type: 'budget', text: '3000-4000€/mois actuellement dépensé → agent à 500€/mois = ROI 6-8x' },
+  { type: 'closing', text: 'Pour votre volume, notre agent fait le travail en continu pour 500€/mois. Setup en 48h.' },
+  { type: 'sentiment', level: 'hot' },
+  { type: 'transcript', speaker: 'Prospect', text: 'Hmm je vais devoir en parler à mon associé...' },
+  { type: 'danger', text: 'Signal de fuite : "en parler à mon associé". Verrouille un prochain RDV MAINTENANT.' },
+  { type: 'suggestion', text: 'Propose un call à 3 cette semaine : "Quand est-ce que votre associé est dispo pour 15 min ?"' },
+  { type: 'transcript', speaker: 'Prospect', text: 'Il est dispo jeudi matin normalement.' },
+  { type: 'insight', text: 'Le prospect cherche un allié interne. Envoie un récap PDF avant jeudi.' },
+  { type: 'suggestion', text: '"Parfait, je vous envoie un résumé ce soir pour préparer jeudi. On cale 10h ?"' },
+  { type: 'sentiment', level: 'warm' },
+  { type: 'transcript', speaker: 'Prospect', text: 'Oui 10h ça marche. Envoyez-moi ça par email.' },
+  { type: 'closing', text: 'RDV verrouillé. Envoie le récap + lien Calendly dans l\'heure.' },
+  { type: 'keyword', words: ['jeudi 10h', 'email', 'récap', 'associé'] },
+  { type: 'sentiment', level: 'hot' },
+]
+
+document.addEventListener('dblclick', (e) => {
+  // Don't trigger on bar buttons
+  if (e.target.closest('#bar')) return
+
+  demoMode = !demoMode
+  if (demoMode) {
+    let i = 0
+    startTime = Date.now()
+    statusEl.textContent = 'DEMO'
+    statusEl.style.color = '#f0c674'
+    clearInterval(timerInterval)
+    timerInterval = setInterval(updateTimer, 1000)
+    addLine('Mode démo activé — simulation de call', 'system')
+
+    demoInterval = setInterval(() => {
+      if (i >= demos.length) i = 0
+      handleMessage(JSON.stringify(demos[i++]))
+    }, 2500)
+  } else {
+    clearInterval(demoInterval)
+    clearInterval(timerInterval)
+    demoInterval = null
+    statusEl.textContent = 'DISCONNECTED'
+    statusEl.style.color = '#333'
+    addLine('Mode démo arrêté', 'system')
+  }
+})
+</script>
+</body>
+</html>
